@@ -62,7 +62,7 @@ for i in tqdm(qr_by_ticker.keys()):
 
 # Replacing all "None" values with NaN
 for i in tqdm(qr_by_ticker.keys()):
-    qr_by_ticker[i].replace("None", np.nan, inplace=True)
+    qr_by_ticker[i] = qr_by_ticker[i].replace("None", np.nan)
 
 # Creating a new dictionary that contains the numerical values, then converting all values to numeric values
 num_df = {}
@@ -93,19 +93,21 @@ for i in tqdm(pcnt_df.keys()):
 for i in tqdm(new_df.keys()):
     new_df[i] = new_df[i][1:-1]
 
+# ===============================================
+
 # Combining all stock DFs into one
 big_df = pd.DataFrame()
 for i in tqdm(pcnt_df.keys()):
     big_df = big_df.append(new_df[i], sort=False)
 
 # Filling the NaNs with 0
-big_df.fillna(0, inplace=True)
+big_df = big_df.fillna(0)
 
 # Resetting the index because we no longer need the dates
-big_df.reset_index(drop=True, inplace=True)
+big_df = big_df.reset_index(drop=True)
 
 # Dropping the price related columns to prevent data leakage
-big_df.drop(['Price', 'Price high', 'Price low'], 1, inplace=True)
+big_df = big_df.drop(['Price', 'Price high', 'Price low'], axis=1)
 
 # Exporting the final DataFrame
 with open("main_df.pkl", 'wb') as fp:
