@@ -26,6 +26,17 @@ def class_creation(df, threshold=3):
 
 stocks_df = pd.read_csv('historical_qrs.csv', index_col=['Ticker', 'Row ID'])
 
+"""
+Idea:
+Takes a five year period of QRs as input and outputs buy, sell or hold for next quarter
+- if a company has been traded for less than five years, missing data is replaced with nan (top padded)
+- assumes future performance is not always independent from the past (rejects random walk hypothesis)
+- takes relative change as input but also considers relative total assets (not the change thereof)
+- assumes relative size of a company may matter too 
+- if there exists data for a company over a period of N quarters than N-2 different training data can be generated 
+using a sliding window method 
+"""
+
 print()
 # # Setting the index as the Date
 # for i in tqdm(stocks_df.keys()):
