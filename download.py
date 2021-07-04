@@ -5,7 +5,7 @@ from io import StringIO
 from bs4 import BeautifulSoup
 from urllib.request import urlopen
 from tqdm import tqdm
-from joblib import dump
+from pickle import dump
 
 
 html_page = urlopen('https://web.archive.org/web/20200123214339/http://www.stockpup.com/data')
@@ -24,4 +24,5 @@ for tag in tqdm(soup.findAll('a', attrs={'href': re.compile('^/web/'), 'title': 
 # historical_qrs = pd.concat(qrs, keys=tickers, names=['Ticker', 'Row ID'])
 # historical_qrs.to_csv('historical_qrs.csv', index=True)
 
-dump(qr_by_tickers, 'qr_by_tickers.joblib')
+with open('qr_by_tickers.pkl', 'wb') as fp:
+    dump(qr_by_tickers, fp)

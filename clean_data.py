@@ -1,8 +1,7 @@
-import pickle
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
-from joblib import dump, load
+from pickle import dump, load
 
 from keras.preprocessing import sequence
 
@@ -52,7 +51,8 @@ using a sliding window method (potential data leak?)
 """
 
 # Load dictionary of QRs by tickers
-sequences = load('qr_by_ticker.joblib')
+with open('qr_by_tickers.pkl', 'rb') as fp:
+    sequences = load(fp)
 
 for i in tqdm(sequences.keys()):
     # Setting the index as the Date
@@ -95,7 +95,7 @@ for df in sequences.values():
 # print(np.quantile(sequence_lens, 0.9))
 
 # Padding the sequence with the values in last row or truncating to 90% quantile of QR counts
-desired_length = np.quantile(sequence_lens, 0.9)
+desired_length = int(np.quantile(sequence_lens, 0.9))
 new_seq = []
 for seq in sequences.values():
     padding_length = desired_length - len(seq)
@@ -113,6 +113,7 @@ for seq in sequences.values():
 final_seq = sequence.pad_sequences(new_seq, maxlen=desired_length, padding='post', dtype='float', truncating='post')
 # todo: decide whether to use 0 or last row for padding
 # todo: decide whether to pad to maximum length or desired length
+# todo: handle preprocessing within model
 
 # ===============================================
 
@@ -131,5 +132,5 @@ final_seq = sequence.pad_sequences(new_seq, maxlen=desired_length, padding='post
 # big_df = big_df.drop(['Price', 'Price high', 'Price low'], axis=1)
 
 # Exporting the final DataFrame
-# with open("main_df.pkl", 'wb') as fp:
-#     pickle.dump(sequences, fp)
+with open("main_df.pkl", 'wb') as fp:
+    dump(sequences, fp)
