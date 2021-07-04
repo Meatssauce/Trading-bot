@@ -22,8 +22,6 @@ for tag in tqdm(soup.findAll('a', attrs={'href': re.compile('^/web/'), 'title': 
     qr_by_tickers[ticker] = qr
 
 # historical_qrs = pd.concat(qrs, keys=tickers, names=['Ticker', 'Row ID'])
-# remove html tag column
-# del historical_qrs[historical_qrs.columns[-1]]
 # historical_qrs.to_csv('historical_qrs.csv', index=True)
 
 dump(qr_by_tickers, 'qr_by_tickers.joblib')
