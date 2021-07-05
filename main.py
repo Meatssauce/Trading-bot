@@ -24,10 +24,8 @@ def make_model(sequence_length, feature_count):
     return model
 
 
-with open('main_df_set.pkl', 'rb') as fp:
-    data = load(fp)
-
-X, y = data.drop(['Decision']), data['Decision']
+with open('data/X.pkl', 'rb') as X_file, open('data/y.pkl', 'rb') as y_file:
+    X, y = load(X_file), load(y_file)
 
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 

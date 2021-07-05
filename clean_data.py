@@ -168,7 +168,7 @@ df_set = pad_df_set(df_set, desired_length=desired_length, padding='pre', trunca
 # big_df = big_df.drop(['Price', 'Price high', 'Price low'], axis=1)
 
 y = {k: df.pop('Decision') for k, df in df_set.items()}
-X, y = np.stack(df_set), np.stack(y)
+X, y = np.stack(list(df_set.values())), np.stack(list(y.values()))
 
 # Exporting the final DataFrames
 X_filename = "data/X.pkl"
