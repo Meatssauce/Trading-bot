@@ -1,9 +1,18 @@
+import os
+from enum import Enum
+
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
 from pickle import dump, load
 
-from keras.preprocessing import sequence
+from pandas.tseries.offsets import MonthEnd
+
+
+class StockClass(Enum):
+    HOLD = 0
+    BUY = 1
+    SELL = 2
 
 
 def set_index_to_date(df):
@@ -12,29 +21,65 @@ def set_index_to_date(df):
     """
     df['Quarter end'] = pd.to_datetime(df['Quarter end'])
     df = df.set_index("Quarter end")
-    return df.sort_index(ascending=False)
+    return df.sort_index(ascending=True)
 
 
-def class_creation(df, threshold=3):
+def class_creation(df, threshold=0.03):
     """
     Creates classes of:
+    - hold(0)
     - buy(1)
-    - hold(2)
-    - sell(0)
+    - sell(2)
 
     Threshold can be changed to fit whatever price percentage change is desired
     """
     if df['Price high'] >= threshold and df['Price low'] >= threshold:
         # Buys
-        return 1
+        return StockClass.BUY.value
 
     elif df['Price high'] <= -threshold and df['Price low'] <= -threshold:
         # Sells
-        return 0
+        return StockClass.SELL.value
 
     else:
         # Holds
-        return 2
+        return StockClass.HOLD.value
+
+
+def pad_df_set(df_set, desired_length, padding, truncating):
+    def _get_padding_dates(date, length):
+        dates = []
+        for i in range(1, length + 1):
+            dates.append(pd.to_datetime(date, format='%Y%m%d') - MonthEnd(3 * i))
+        dates.reverse()
+        return dates
+
+    assert padding in ['pre', 'post'] and truncating in ['pre', 'post']
+
+    result = {}
+    for i in df_set.keys():
+        df = df_set[i]
+        padding_length = desired_length - len(df)
+
+        if padding_length > 0:
+            # generate padding
+            value_to_pad = pd.DataFrame({k: [0] for k in df.columns})
+            value_to_pad['Decision'] = StockClass.HOLD.value
+
+            df_to_pad = pd.concat([value_to_pad] * padding_length)
+            df_to_pad.index = _get_padding_dates(df.index[-1 if padding == 'post' else 0], padding_length)
+
+            # add padding to df
+            df = pd.concat([df, df_to_pad] if padding == 'post' else [df_to_pad, df])
+            # padding = np.repeat(one_seq[-1], padding_length).reshape(38, padding_length).transpose()
+            # one_seq = np.concatenate([one_seq, padding])
+
+        elif padding_length < 0:
+            # truncate df
+            df = df[:padding_length] if truncating == 'post' else df[-padding_length:]
+
+        result[i] = df
+    return result
 
 
 """
@@ -51,66 +96,57 @@ using a sliding window method (potential data leak?)
 """
 
 # Load dictionary of QRs by tickers
-with open('qr_by_tickers.pkl', 'rb') as fp:
-    sequences = load(fp)
+with open('data/qr_by_tickers.pkl', 'rb') as file:
+    df_set = load(file)
 
-for i in tqdm(sequences.keys()):
+for i in tqdm(df_set.keys()):
     # Setting the index as the Date
-    sequences[i] = set_index_to_date(sequences[i])
-
-    # Replacing all "None" values with NaN
-    sequences[i] = sequences[i].replace("None", np.nan)
+    df_set[i] = set_index_to_date(df_set[i])
 
     # Converting all values to numeric values
-    sequences[i] = sequences[i].apply(pd.to_numeric)
-
-    # Replacing values with percent difference or change
-    sequences[i] = sequences[i].pct_change(periods=1)
-
-    # Replacing infinite values with NaN
-    sequences[i] = sequences[i].replace([np.inf, -np.inf], np.nan)
+    df_set[i] = df_set[i].apply(pd.to_numeric, errors='coerce')
 
     # Interpolate missing values
-    sequences[i] = sequences[i].interpolate(method='linear', axis=0)  # use spline yields may better results?
+    df_set[i] = df_set[i].interpolate(method='linear', axis=0)  # use spline yields may better results?
+
+    # forward fill and back fill missing values at the bottom and top respectively
+    df_set[i] = df_set[i].fillna(method='ffill')
+    df_set[i] = df_set[i].fillna(method='bfill')
+
+    # Replacing values with percent difference or change
+    df_set[i] = df_set[i].pct_change(periods=1)
+
+    # Replacing infinite values with NaN
+    df_set[i] = df_set[i].replace([np.inf, -np.inf], np.nan)
+
+    # fill any remaining nan with 0
+    df_set[i] = df_set[i].fillna(0)
 
     # Creating the class 'Decision' determining if a quarterly reports improvement is a buy, hold, or sell.
     # Creating the new column with the classes, shifted by -1 in order to know if the prices will increase/decrease in
     # the next quarter.
-    sequences[i]['Decision'] = sequences[i].apply(class_creation, axis=1).shift(-1)
+    df_set[i]['Decision'] = df_set[i].apply(class_creation, axis=1).shift(-1)
 
     # Excluding the first and last rows (cannot label)
-    sequences[i] = sequences[i][1:-1]
+    df_set[i] = df_set[i][1:-1]
 
     # Dropping the price related columns to prevent data leakage
-    sequences[i] = sequences[i].drop(['Price', 'Price high', 'Price low'], axis=1)
+    df_set[i] = df_set[i].drop(['Price', 'Price high', 'Price low'], axis=1)
 
 # produces N-2 sets of data from N periods
 # not recommended?
 
-# Show distribution of company QR counts
-sequence_lens = []
-for df in sequences.values():
-    sequence_lens.append(len(df))
-# print(pd.Series(sequence_lens).describe())
-# print(np.quantile(sequence_lens, 0.9))
+# Show distribution of df row counts (company QR counts)
+# Padding each df with 0 and hold or truncating to 90% quantile of QR counts
+df_set_lengths = []
+for df in df_set.values():
+    df_set_lengths.append(len(df))
+desired_length = int(np.quantile(df_set_lengths, 0.9))
 
-# Padding the sequence with the values in last row or truncating to 90% quantile of QR counts
-desired_length = int(np.quantile(sequence_lens, 0.9))
-new_seq = []
-for seq in sequences.values():
-    padding_length = desired_length - len(seq)
-
-    if padding_length > 0:
-        last_value = seq[-1:]
-        padding = pd.concat([last_value] * padding_length)
-        seq = pd.concat([seq, padding])
-        # padding = np.repeat(one_seq[-1], padding_length).reshape(38, padding_length).transpose()
-        # one_seq = np.concatenate([one_seq, padding])
-
-    new_seq.append(seq)
-
+df_set = pad_df_set(df_set, desired_length=desired_length, padding='pre', truncating='pre')
 # Use only this line if padding with 0 instead of last row
-final_seq = sequence.pad_sequences(new_seq, maxlen=desired_length, padding='post', dtype='float', truncating='post')
+# final_df_set = sequence.pad_sequences(df_set.values(), maxlen=desired_length, padding='pre', dtype='float',
+#                                    truncating='pre')
 # todo: decide whether to use 0 or last row for padding
 # todo: decide whether to pad to maximum length or desired length
 # todo: handle preprocessing within model
@@ -131,6 +167,14 @@ final_seq = sequence.pad_sequences(new_seq, maxlen=desired_length, padding='post
 # # Dropping the price related columns to prevent data leakage
 # big_df = big_df.drop(['Price', 'Price high', 'Price low'], axis=1)
 
-# Exporting the final DataFrame
-with open("main_df.pkl", 'wb') as fp:
-    dump(sequences, fp)
+y = {k: df.pop('Decision') for k, df in df_set.items()}
+X, y = np.stack(df_set), np.stack(y)
+
+# Exporting the final DataFrames
+X_filename = "data/X.pkl"
+y_filename = 'data/y.pkl'
+os.makedirs(os.path.dirname(X_filename), exist_ok=True)
+os.makedirs(os.path.dirname(y_filename), exist_ok=True)
+with open(X_filename, 'wb') as X_file, open(y_filename, 'wb') as y_file:
+    dump(X, X_file)
+    dump(y, y_file)
