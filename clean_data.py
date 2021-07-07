@@ -144,10 +144,9 @@ for df in df_set.values():
 desired_length = int(np.quantile(df_set_lengths, 0.9))
 
 df_set = pad_df_set(df_set, desired_length=desired_length, padding='pre', truncating='pre')
-# Use only this line if padding with 0 instead of last row
+# Use only this line to return ndarray right away (faster but no hard to change later on)
 # final_df_set = sequence.pad_sequences(df_set.values(), maxlen=desired_length, padding='pre', dtype='float',
 #                                    truncating='pre')
-# todo: decide whether to use 0 or last row for padding
 # todo: decide whether to pad to maximum length or desired length
 # todo: handle preprocessing within model
 
