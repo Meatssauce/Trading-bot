@@ -57,7 +57,7 @@ def pad_df_set(df_set, desired_length, padding, truncating):
     assert padding in ['pre', 'post'] and truncating in ['pre', 'post']
 
     result = {}
-    for i in df_set.keys():
+    for i in tqdm(df_set.keys()):
         df = df_set[i]
         padding_length = desired_length - len(df)
 
@@ -133,8 +133,15 @@ for i in tqdm(df_set.keys()):
     # Dropping the price related columns to prevent data leakage
     df_set[i] = df_set[i].drop(['Price', 'Price high', 'Price low'], axis=1)
 
-# produces N-2 sets of data from N periods
+# sliding window data augmentation
 # not recommended?
+keys = list(df_set.keys())
+for i in tqdm(range(len(keys))):
+    ticker = keys[i]
+    count = 1
+    for j in range(1, len(df_set[ticker].index)):
+        df_set[ticker + f'_{count}'] = df_set[ticker][:-j]
+        count += 1
 
 # Show distribution of df row counts (company QR counts)
 # Padding each df with 0 and hold or truncating to 90% quantile of QR counts
