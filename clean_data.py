@@ -7,6 +7,7 @@ from tqdm import tqdm
 from pickle import dump, load
 
 from pandas.tseries.offsets import MonthEnd
+import yfinance as yf
 
 
 class StockClass(Enum):
@@ -132,6 +133,14 @@ for i in tqdm(df_set.keys()):
 
     # Dropping the price related columns to prevent data leakage
     df_set[i] = df_set[i].drop(['Price', 'Price high', 'Price low'], axis=1)
+
+    # Add industry, sector, country and market
+    # info = yf.Ticker(i).info
+    # df_set[i]['Industry'] = info['industry'] * len(df_set[i].index)
+    # df_set[i]['Sector'] = info['sector'] * len(df_set[i].index)
+    # df_set[i]['Country'] = info['country'] * len(df_set[i].index)
+    # df_set[i]['Market'] = info['market'] * len(df_set[i].index)
+    # todo: check code, cluster
 
 # sliding window data augmentation
 # not recommended?
