@@ -135,11 +135,12 @@ for i in tqdm(df_set.keys()):
     df_set[i] = df_set[i].drop(['Price', 'Price high', 'Price low'], axis=1)
 
     # Add industry, sector, country and market
-    # info = yf.Ticker(i).info
-    # df_set[i]['Industry'] = info['industry'] * len(df_set[i].index)
-    # df_set[i]['Sector'] = info['sector'] * len(df_set[i].index)
-    # df_set[i]['Country'] = info['country'] * len(df_set[i].index)
-    # df_set[i]['Market'] = info['market'] * len(df_set[i].index)
+    info = yf.Ticker(i).info
+    company_info = ['industry', 'sector', 'country', 'market']
+    for col in company_info:
+        value = info.get(col)
+        df_set[i][col] = [value] * len(df_set[i].index) if value is not None else ['N/A'] * len(df_set[i].index)
+
     # todo: check code, cluster
 
 # sliding window data augmentation
@@ -166,22 +167,7 @@ df_set = pad_df_set(df_set, desired_length=desired_length, padding='pre', trunca
 # todo: decide whether to pad to maximum length or desired length
 # todo: handle preprocessing within model
 
-# ===============================================
-
-# # Combining all stock DFs into one
-# big_df = pd.DataFrame()
-# for i in tqdm(sequences.keys()):
-#     big_df = big_df.append(sequences[i], sort=False)
-#
-# # Filling the NaNs with 0
-# big_df = big_df.fillna(0)
-#
-# # Resetting the index because we no longer need the dates
-# big_df = big_df.reset_index(drop=True)
-#
-# # Dropping the price related columns to prevent data leakage
-# big_df = big_df.drop(['Price', 'Price high', 'Price low'], axis=1)
-
+# Convert dictionary of dataframes to ndarray for X and y
 y = {k: df.pop('Decision') for k, df in df_set.items()}
 X, y = np.stack(list(df_set.values())), np.stack(list(y.values()))
 
