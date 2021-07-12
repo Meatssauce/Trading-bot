@@ -7,6 +7,8 @@ from tensorflow.keras.layers import LSTM, Dense, Dropout
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.callbacks import EarlyStopping
 
+from sklearn.preprocessing import OneHotEncoder
+
 from keras import backend as K
 
 
@@ -51,9 +53,17 @@ with open('data/X.pkl', 'rb') as X_file, open('data/y.pkl', 'rb') as y_file:
 y = to_categorical(y, 3)
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
+parser = OneHotEncoder()
+X_train = parser.fit_transform(X_train)
+
 model = make_model(X_train.shape[1], X_train.shape[2])
 early_stopping = EarlyStopping(monitor='val_f1_m', patience=1000, verbose=1, restore_best_weights=True)
 model.fit(X_train, y_train, validation_split=0.2, batch_size=32, epochs=10000, callbacks=[early_stopping])
+
+X_test = parser.transform(X_test)
 model.evaluate(X_test, y_test)
 
-model.save('save-models/LSTM_model.hdf5')
+model.save('saved-models/LSTM_model.hdf5')
+with open('saved-models/parser.pkl') as f:
+    dump(parser, f)
+
