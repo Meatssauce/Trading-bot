@@ -1,15 +1,12 @@
 from pickle import load, dump
-
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense, Dropout
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.callbacks import EarlyStopping
-
-from sklearn.preprocessing import OneHotEncoder
-
 from keras import backend as K
+from sklearn.preprocessing import OneHotEncoder
 
 
 def recall_m(y_true, y_pred):
