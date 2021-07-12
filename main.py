@@ -29,7 +29,7 @@ def precision_m(y_true, y_pred):
 def f1_m(y_true, y_pred):
     precision = precision_m(y_true, y_pred)
     recall = recall_m(y_true, y_pred)
-    return 2*((precision*recall)/(precision+recall+K.epsilon()))
+    return 2 * ((precision * recall) / (precision + recall + K.epsilon()))
 
 
 def make_model(sequence_length, feature_count):
@@ -47,23 +47,26 @@ def make_model(sequence_length, feature_count):
     return model
 
 
+# Load data
 with open('data/X.pkl', 'rb') as X_file, open('data/y.pkl', 'rb') as y_file:
     X, y = load(X_file), load(y_file)
-
 y = to_categorical(y, 3)
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
+# Parse train data
 parser = OneHotEncoder()
 X_train = parser.fit_transform(X_train)
 
+# Fit model
 model = make_model(X_train.shape[1], X_train.shape[2])
 early_stopping = EarlyStopping(monitor='val_f1_m', patience=1000, verbose=1, restore_best_weights=True)
 model.fit(X_train, y_train, validation_split=0.2, batch_size=32, epochs=10000, callbacks=[early_stopping])
 
+# Parse test data and evaluate
 X_test = parser.transform(X_test)
 model.evaluate(X_test, y_test)
 
+# Save model and parser
 model.save('saved-models/LSTM_model.hdf5')
 with open('saved-models/parser.pkl') as f:
     dump(parser, f)
-
