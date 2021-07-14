@@ -8,6 +8,7 @@ from pickle import dump, load
 
 from pandas.tseries.offsets import MonthEnd
 import yfinance as yf
+from tslearn.clustering import TimeSeriesKMeans
 
 
 class StockClass(Enum):
@@ -167,11 +168,13 @@ df_set = pad_df_set(df_set, desired_length=desired_length, padding='pre', trunca
 # todo: decide whether to pad to maximum length or desired length
 # todo: handle preprocessing within model
 
-# Convert dictionary of dataframes to ndarray for X and y
+# Take X and y from dictionary of dataframes
 y = {k: df.pop('Decision') for k, df in df_set.items()}
-X, y = np.stack(list(df_set.values())), np.stack(list(y.values()))
+X = df_set
 
-# Exporting the final DataFrames
+
+# Exporting the final DataFrames as ndarrays
+X, y = np.stack(list(X.values())), np.stack(list(y.values()))
 X_filename = "data/X.pkl"
 y_filename = 'data/y.pkl'
 os.makedirs(os.path.dirname(X_filename), exist_ok=True)

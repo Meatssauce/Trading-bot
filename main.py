@@ -1,5 +1,6 @@
 from pickle import load, dump
 import pandas as pd
+import numpy as np
 from sklearn.model_selection import train_test_split
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense, Dropout
@@ -7,6 +8,31 @@ from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.callbacks import EarlyStopping
 from keras import backend as K
 from sklearn.preprocessing import OneHotEncoder
+from tslearn.clustering import TimeSeriesKMeans
+
+
+class Parser:
+    def __init__(self):
+        self.encoder = OneHotEncoder()
+        self.kmeans = TimeSeriesKMeans(n_clusters=5, max_iter=10, verbose=1, n_jobs=-1, random_state=42)
+
+    def fit(self, X):
+        self.encoder.fit(X)
+        self.kmeans.fit(X)
+        return self
+
+    def transform(self, X):
+        X = self.encoder.transform(X)
+        cluster_predictions = self.kmeans.predict(X)
+        for i in range(cluster_predictions):
+            cluster = [cluster_predictions[i]] * X.shape[1]
+            X[i] = np.hstack((X[i], cluster))
+        return X
+
+    def fit_transform(self, X):
+        self.fit(X)
+        X = self.transform(X)
+        return X
 
 
 def recall_m(y_true, y_pred):
@@ -46,12 +72,13 @@ def make_model(sequence_length, feature_count):
 
 # Load data
 with open('data/X.pkl', 'rb') as X_file, open('data/y.pkl', 'rb') as y_file:
-    X, y = load(X_file), load(y_file)
+    X_by_tickers, y_by_tickers = load(X_file), load(y_file)
 y = to_categorical(y, 3)
+
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
 # Parse train data
-parser = OneHotEncoder()
+parser = Parser()
 X_train = parser.fit_transform(X_train)
 
 # Fit model
