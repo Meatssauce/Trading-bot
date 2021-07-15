@@ -8,7 +8,6 @@ from pickle import dump, load
 
 from pandas.tseries.offsets import MonthEnd
 import yfinance as yf
-from tslearn.clustering import TimeSeriesKMeans
 
 
 class StockClass(Enum):
@@ -144,6 +143,12 @@ for i in tqdm(df_set.keys()):
 
     # todo: check code, cluster
 
+# make validation set that is not augmented using sliding window
+val_set = {}
+for key in list(df_set.keys())[-20:]:
+    val_set[key] = df_set.pop(key, None)
+val_set = pad_df_set(val_set, desired_length=101, padding='pre', truncating='pre')
+
 # sliding window data augmentation
 # not recommended?
 keys = list(df_set.keys())
@@ -159,7 +164,8 @@ for i in tqdm(range(len(keys))):
 df_set_lengths = []
 for df in df_set.values():
     df_set_lengths.append(len(df))
-desired_length = int(np.quantile(df_set_lengths, 0.9))
+# desired_length = int(np.quantile(df_set_lengths, 0.9))
+desired_length = 101
 
 df_set = pad_df_set(df_set, desired_length=desired_length, padding='pre', truncating='pre')
 # Use only this line to return ndarray right away (faster but no hard to change later on)
@@ -172,11 +178,24 @@ df_set = pad_df_set(df_set, desired_length=desired_length, padding='pre', trunca
 y = {k: df.pop('Decision') for k, df in df_set.items()}
 X = df_set
 
+# Exporting the final DataFrames
+with open('data/qr_by_tickers_final.pkl', 'wb') as file:
+    dump(df_set, file)
 
-# Exporting the final DataFrames as ndarrays
-X, y = np.stack(list(X.values())), np.stack(list(y.values()))
 X_filename = "data/X.pkl"
 y_filename = 'data/y.pkl'
+os.makedirs(os.path.dirname(X_filename), exist_ok=True)
+os.makedirs(os.path.dirname(y_filename), exist_ok=True)
+with open(X_filename, 'wb') as X_file, open(y_filename, 'wb') as y_file:
+    dump(X, X_file)
+    dump(y, y_file)
+
+# Take X and y from dictionary of dataframes
+y = {k: df.pop('Decision') for k, df in val_set.items()}
+X = val_set
+
+X_filename = "data/X_val.pkl"
+y_filename = 'data/y_val.pkl'
 os.makedirs(os.path.dirname(X_filename), exist_ok=True)
 os.makedirs(os.path.dirname(y_filename), exist_ok=True)
 with open(X_filename, 'wb') as X_file, open(y_filename, 'wb') as y_file:

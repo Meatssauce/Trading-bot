@@ -2,7 +2,7 @@ from pickle import load, dump
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
-from tensorflow.keras.models import Sequential
+from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.layers import LSTM, Dense, Dropout
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.callbacks import EarlyStopping
@@ -70,27 +70,47 @@ def make_model(sequence_length, feature_count):
     return model
 
 
-# Load data
-with open('data/X.pkl', 'rb') as X_file, open('data/y.pkl', 'rb') as y_file:
-    X, y = load(X_file), load(y_file)
-y = to_categorical(y, 3)
+test2 = False
+if not test2:
+    # Load data
+    with open('data/X.pkl', 'rb') as X_file, open('data/y.pkl', 'rb') as y_file:
+        X, y = load(X_file), load(y_file)
+    X, y = np.stack(list(X.values())), np.stack(list(y.values()))
+    y = to_categorical(y, 3)
 
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X,
+        y,
+        test_size=0.2,
+        # shuffle=False,
+        random_state=42
+    )
 
-# Parse train data
-parser = Parser()
-X_train = parser.fit_transform(X_train)
+    # Parse train data
+    # parser = Parser()
+    # X_train = parser.fit_transform(X_train)
 
-# Fit model
-model = make_model(X_train.shape[1], X_train.shape[2])
-early_stopping = EarlyStopping(monitor='val_f1_m', patience=1000, verbose=1, restore_best_weights=True)
-model.fit(X_train, y_train, validation_split=0.2, batch_size=32, epochs=10000, callbacks=[early_stopping])
+    # Fit model
+    model = make_model(X_train.shape[1], X_train.shape[2])
+    early_stopping = EarlyStopping(monitor='val_f1_m', patience=1000, verbose=1, restore_best_weights=True)
+    model.fit(X_train, y_train, validation_split=0.2, batch_size=32, epochs=10000, callbacks=[early_stopping])
 
-# Parse test data and evaluate
-X_test = parser.transform(X_test)
-model.evaluate(X_test, y_test)
+    # X_test = parser.transform(X_test)
+    model.evaluate(X_test, y_test)
+else:
+    # Parse test data and evaluate
+    with open('data/X_val.pkl', 'rb') as X_file, open('data/y_val.pkl', 'rb') as y_file:
+        X_test2, y_test2 = load(X_file), load(y_file)
+    X_test2, y_test2 = np.stack(list(X_test2.values())), np.stack(list(y_test2.values()))
+    y_test2 = to_categorical(y_test2, 3)
+
+    model = load_model('saved-models/LSTM_model.hdf5',
+                       custom_objects={'f1_m': f1_m, 'precision_m': precision_m, 'recall_m': recall_m})
+    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=[f1_m, precision_m, recall_m])
+    model.evaluate(X_test2, y_test2)
+    # - loss: 0.7480 - f1_m: 0.4390 - precision_m: 0.9647 - recall_m: 0.2842
 
 # Save model and parser
-model.save('saved-models/LSTM_model.hdf5')
-with open('saved-models/parser.pkl') as f:
-    dump(parser, f)
+# model.save('saved-models/LSTM_model.hdf5')
+# with open('saved-models/parser.pkl') as f:
+#     dump(parser, f)
