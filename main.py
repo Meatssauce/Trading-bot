@@ -92,11 +92,17 @@ if not test2:
 
     # Fit model
     model = make_model(X_train.shape[1], X_train.shape[2])
-    early_stopping = EarlyStopping(monitor='val_f1_m', patience=1000, verbose=1, restore_best_weights=True)
-    model.fit(X_train, y_train, validation_split=0.2, batch_size=32, epochs=10000, callbacks=[early_stopping])
+    early_stopping = EarlyStopping(monitor='val_loss', patience=50, min_delta=0, verbose=1, restore_best_weights=True)
+    model.fit(X_train, y_train, validation_split=0.2, batch_size=32, epochs=500, callbacks=[early_stopping])
 
     # X_test = parser.transform(X_test)
     model.evaluate(X_test, y_test)
+    # - loss: 0.4041 - f1_m: 0.7806 - precision_m: 0.9144 - recall_m: 0.6815
+
+    # Save model and parser
+    model.save('saved-models/LSTM_model.hdf5')
+    # with open('saved-models/parser.pkl') as f:
+    #     dump(parser, f)
 else:
     # Parse test data and evaluate
     with open('data/X_val.pkl', 'rb') as X_file, open('data/y_val.pkl', 'rb') as y_file:
@@ -109,8 +115,7 @@ else:
     model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=[f1_m, precision_m, recall_m])
     model.evaluate(X_test2, y_test2)
     # - loss: 0.7480 - f1_m: 0.4390 - precision_m: 0.9647 - recall_m: 0.2842
-
-# Save model and parser
-# model.save('saved-models/LSTM_model.hdf5')
-# with open('saved-models/parser.pkl') as f:
-#     dump(parser, f)
+    # test results on data that was not used to generate augmented data
+    # much lower f1 suggests data leak? maybe from sliding window on original data set?
+    # significant overlap in time period among and across training and test examples - a source of bias?
+    # may need larger dataset for data on more companies over a longer time period
