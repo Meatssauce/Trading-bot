@@ -119,3 +119,4 @@ else:
     # much lower f1 suggests data leak? maybe from sliding window on original data set?
     # significant overlap in time period among and across training and test examples - a source of bias?
     # may need larger dataset for data on more companies over a longer time period
+    # todo: scrape data from SEC
