@@ -73,7 +73,7 @@ def make_model(sequence_length, feature_count):
 robust_test = False
 if not robust_test:
     # Load data
-    with open('data/X.pkl', 'rb') as X_file, open('data/y.pkl', 'rb') as y_file:
+    with open('data/X_train.pkl', 'rb') as X_file, open('data/y_train.pkl', 'rb') as y_file:
         X, y = load(X_file), load(y_file)
     X, y = np.stack(list(X.values())), np.stack(list(y.values()))
     y = to_categorical(y, 3)
@@ -105,7 +105,7 @@ if not robust_test:
     #     dump(parser, f)
 else:
     # Parse test data and evaluate
-    with open('data/X_val.pkl', 'rb') as X_file, open('data/y_val.pkl', 'rb') as y_file:
+    with open('data/X_test.pkl', 'rb') as X_file, open('data/y_test.pkl', 'rb') as y_file:
         X_test2, y_test2 = load(X_file), load(y_file)
     X_test2, y_test2 = np.stack(list(X_test2.values())), np.stack(list(y_test2.values()))
     y_test2 = to_categorical(y_test2, 3)

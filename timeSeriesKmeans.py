@@ -4,7 +4,7 @@ from sklearn.model_selection import train_test_split
 from tensorflow.keras.utils import to_categorical
 from tslearn.clustering import TimeSeriesKMeans
 
-with open('data/X.pkl', 'rb') as X_file, open('data/y.pkl', 'rb') as y_file:
+with open('data/X_train.pkl', 'rb') as X_file, open('data/y_train.pkl', 'rb') as y_file:
     X, y = load(X_file), load(y_file)
 X, y = np.stack(list(X.values())), np.stack(list(y.values()))
 y = to_categorical(y, 3)
