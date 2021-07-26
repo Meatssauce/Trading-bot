@@ -70,8 +70,8 @@ def make_model(sequence_length, feature_count):
     return model
 
 
-test2 = False
-if not test2:
+robust_test = False
+if not robust_test:
     # Load data
     with open('data/X.pkl', 'rb') as X_file, open('data/y.pkl', 'rb') as y_file:
         X, y = load(X_file), load(y_file)
