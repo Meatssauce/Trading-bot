@@ -187,7 +187,7 @@ test_data = pad_data(test_data, to_length=desired_length, padding='pre', truncat
 # use only line below to return as ndarray (faster but no hard to change later on)
 # train_data = sequence.pad_sequences(train_data.values(), maxlen=desired_length, padding='pre', dtype='float',
 # truncating='pre')
-# todo: handle preprocessing within model
+# todo: handle preprocessing within model?
 
 save_as_x_y(train_data, X_path='data/X_train.pkl', y_path='data/y_train.pkl')
 save_as_x_y(test_data, X_path='data/X_test.pkl', y_path='data/y_test.pkl')
