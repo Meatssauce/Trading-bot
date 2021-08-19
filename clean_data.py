@@ -2,6 +2,7 @@ import os
 from enum import Enum
 import pandas as pd
 import numpy as np
+from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 from pickle import dump, load
@@ -167,12 +168,15 @@ for i in tqdm(data.keys()):
 
 # Make a more robust test test
 train_data, test_data = [i.to_dict() for i in train_test_split(pd.Series(data), test_size=0.2, random_state=42)]
+train_data, val_data = [i.to_dict() for i in train_test_split(pd.Series(train_data), test_size=0.25, random_state=42)]
 
 # Find 90% quantile of data lengths
-train_data_lengths = [len(df) for df in train_data.values()]
-desired_length = int(np.quantile(train_data_lengths, 0.9))
+# train_data_lengths = [len(df) for df in train_data.values()]
+# desired_length = int(np.quantile(train_data_lengths, 0.9))
+desired_length = 101
 
 # Augment training data via sliding window - may cause data leak
+# todo: Use stretching, shifting and dynamic range compression (?) instead - see data augmentation for signals
 if augment_data:
     tickers = list(train_data.keys())
     for ticker in tqdm(tickers):
@@ -189,5 +193,10 @@ test_data = pad_data(test_data, to_length=desired_length, padding='pre', truncat
 # truncating='pre')
 # todo: handle preprocessing within model?
 
+# Feature selection
+# selector = SelectKBest(f_classif, 10)
+# selector.fit_transform(val_data.drop(columns=['Decision']), val_data['Decision'])
+
 save_as_x_y(train_data, X_path='data/X_train.pkl', y_path='data/y_train.pkl')
 save_as_x_y(test_data, X_path='data/X_test.pkl', y_path='data/y_test.pkl')
+save_as_x_y(val_data, X_path='data/X_val.pkl', y_path='data/y_val.pkl')

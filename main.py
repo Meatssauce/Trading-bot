@@ -74,17 +74,26 @@ robust_test = False
 if not robust_test:
     # Load data
     with open('data/X_train.pkl', 'rb') as X_file, open('data/y_train.pkl', 'rb') as y_file:
-        X, y = load(X_file), load(y_file)
-    X, y = np.stack(list(X.values())), np.stack(list(y.values()))
-    y = to_categorical(y, 3)
+        X_train, y_train = load(X_file), load(y_file)
+    with open('data/X_test.pkl', 'rb') as X_file, open('data/y_test.pkl', 'rb') as y_file:
+        X_test, y_test = load(X_file), load(y_file)
+    with open('data/X_val.pkl', 'rb') as X_file, open('data/y_val.pkl', 'rb') as y_file:
+        X_val, y_val = load(X_file), load(y_file)
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X,
-        y,
-        test_size=0.2,
-        # shuffle=False,
-        random_state=42
-    )
+    X_train, y_train = np.stack(list(X_train.values())), np.stack(list(y_train.values()))
+    y_train = to_categorical(y_train, 3)
+    X_test, y_test = np.stack(list(X_test.values())), np.stack(list(y_test.values()))
+    y_test = to_categorical(y_test, 3)
+    X_val, y_val = np.stack(list(X_val.values())), np.stack(list(y_val.values()))
+    y_val = to_categorical(y_val, 3)
+
+    # X_train, X_test, y_train, y_test = train_test_split(
+    #     X,
+    #     y,
+    #     test_size=0.2,
+    #     # shuffle=False,
+    #     random_state=42
+    # )
 
     # Parse train data
     # parser = Parser()
@@ -93,7 +102,7 @@ if not robust_test:
     # Fit model
     model = make_model(X_train.shape[1], X_train.shape[2])
     early_stopping = EarlyStopping(monitor='val_loss', patience=50, min_delta=0, verbose=1, restore_best_weights=True)
-    model.fit(X_train, y_train, validation_split=0.2, batch_size=32, epochs=500, callbacks=[early_stopping])
+    model.fit(X_train, y_train, validation_data=(X_val, y_val), batch_size=32, epochs=500, callbacks=[early_stopping])
 
     # X_test = parser.transform(X_test)
     model.evaluate(X_test, y_test)
