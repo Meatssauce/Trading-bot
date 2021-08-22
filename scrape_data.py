@@ -24,5 +24,5 @@ for tag in tqdm(soup.findAll('a', attrs={'href': re.compile('^/web/'), 'title': 
 # historical_qrs = pd.concat(qr_by_tickers.values(), axis=0, keys=qr_by_tickers.keys(), names=['Ticker', 'Row ID'])
 # historical_qrs.to_csv('data/historical_qrs.csv', index=True)
 
-with open('data/qr_by_tickers.pkl', 'wb') as fp:
+with open('datasets/qr_by_tickers.pkl', 'wb') as fp:
     dump(qr_by_tickers, fp)

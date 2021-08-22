@@ -126,7 +126,7 @@ add_ticker_info = False  # Fetch and add additional company info (very slow)
 augment_data = True  # Augment training data via sliding window, may cause data leak
 
 # Load dictionary of QRs by tickers
-with open('data/qr_by_tickers.pkl', 'rb') as file:
+with open('datasets/qr_by_tickers.pkl', 'rb') as file:
     data = load(file)
 
 # Preprocess data
@@ -197,6 +197,6 @@ test_data = pad_data(test_data, to_length=desired_length, padding='pre', truncat
 # selector = SelectKBest(f_classif, 10)
 # selector.fit_transform(val_data.drop(columns=['Decision']), val_data['Decision'])
 
-save_as_x_y(train_data, X_path='data/X_train.pkl', y_path='data/y_train.pkl')
-save_as_x_y(test_data, X_path='data/X_test.pkl', y_path='data/y_test.pkl')
-save_as_x_y(val_data, X_path='data/X_val.pkl', y_path='data/y_val.pkl')
+save_as_x_y(train_data, X_path='datasets/X_train.pkl', y_path='datasets/y_train.pkl')
+save_as_x_y(test_data, X_path='datasets/X_test.pkl', y_path='datasets/y_test.pkl')
+save_as_x_y(val_data, X_path='datasets/X_val.pkl', y_path='datasets/y_val.pkl')
