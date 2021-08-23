@@ -3,6 +3,8 @@ import random
 from enum import Enum
 import pandas as pd
 import numpy as np
+from category_encoders import BinaryEncoder
+from sklearn.preprocessing import OrdinalEncoder, RobustScaler
 from sklearn.base import TransformerMixin
 from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.impute import SimpleImputer
@@ -12,6 +14,7 @@ from pickle import dump, load
 from pandas.tseries.offsets import MonthEnd
 import yfinance as yf
 import matplotlib.pyplot as plt
+from tensorflow.keras.preprocessing.sequence import pad_sequences
 
 """
 Idea:
@@ -64,15 +67,18 @@ def class_creation(df, threshold=0.03):
         return StockClass.HOLD.value
 
 
+def save_as(obj, path):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'wb') as file:
+        dump(obj, file)
+
+
 def save_as_x_y(data, X_path, y_path):
     y = {k: df.pop('Decision') for k, df in data.items()}
     X = data
 
-    os.makedirs(os.path.dirname(X_path), exist_ok=True)
-    os.makedirs(os.path.dirname(y_path), exist_ok=True)
-    with open(X_path, 'wb') as X_file, open(y_path, 'wb') as y_file:
-        dump(X, X_file)
-        dump(y, y_file)
+    save_as(X, X_path)
+    save_as(y, y_path)
 
 
 def clean(df):
@@ -83,16 +89,19 @@ def clean(df):
     numeric_columns = df.drop(columns=['Stock', 'Quarter end']).columns
     df[numeric_columns] = df[numeric_columns].apply(pd.to_numeric, errors='coerce')
 
-    for stock in tqdm(df['Stock'].unique()):
-        subset = df['Stock'] == stock
+    df = df.sort_values(by=['Stock', 'Quarter end'], axis=0, kind='mergesort')
+    df = df.reset_index(drop=True)
 
-        # todo: Remove duplicates
-        # do something...
+    # for stock in tqdm(df['Stock'].unique()):
+    #     subset = df['Stock'] == stock
+    #
+    #     # todo: Remove duplicates
+    #     # do something...
+    #
+    #     # todo: Insert missing timestamps
+    #     # do something...
 
-        # todo: Insert missing timestamps
-        # do something...
-
-    df = df.sort_values(by=['Quarter end', 'Stock'], axis=0, kind='mergesort')
+    del df['Quarter end']
 
     return df
 
@@ -113,7 +122,8 @@ class StockFundamentalDataImputer(TransformerMixin):
     def transform(self, X):
         for stock in tqdm(X['Stock'].unique()):
             subset = X['Stock'] == stock
-            numeric_columns = X.drop(columns=['Stock', 'Quarter end']).columns
+            # numeric_columns = X.drop(columns=['Stock', 'Quarter end']).columns
+            numeric_columns = X.drop(columns=['Stock']).columns
 
             # Imputation via interpolation
             X.loc[subset, numeric_columns] = X.loc[subset, numeric_columns].interpolate(
@@ -126,7 +136,8 @@ class StockFundamentalDataImputer(TransformerMixin):
 def engineer_features(df, add_stock_info=False):
     for stock in tqdm(df['Stock'].unique()):
         subset = df['Stock'] == stock
-        numeric_columns = df.drop(columns=['Stock', 'Quarter end']).columns
+        # numeric_columns = df.drop(columns=['Stock', 'Quarter end']).columns
+        numeric_columns = df.drop(columns=['Stock']).columns
 
         # Replace values with percent difference or change
         df.loc[subset, numeric_columns] = df.loc[subset, numeric_columns].pct_change(periods=1)
@@ -164,143 +175,156 @@ def augment(df, sigma=0.05, size=20):
     for scalar in scalars:
         new_df = train_data.copy()
         new_df['Stock'] = new_df['Stock'] + str(scalar)
-        numeric_columns = [col for col in df.columns if col not in ['Stock', 'Quarter end']]
+        # numeric_columns = [col for col in df.columns if col not in ['Stock', 'Quarter end']]
+        numeric_columns = [col for col in df.columns if col != 'Stock']
         new_df[numeric_columns] = new_df[numeric_columns] * scalar
         result = pd.concat([result, new_df])
 
     return result
 
 
-class LengthStandardizer(TransformerMixin):
-    def __init__(self):
+class PadTruncateTransformer(TransformerMixin):
+    def __init__(self, maxlen=None, padding='pre', truncating='pre', dtype='float'):
         self.length = None
+        self.padding = padding
+        self.truncating = truncating
+        self.dtype = dtype
 
     def fit(self, X, y=None, quantile=0.9):
         self.length = int(np.quantile(X['Stock'].value_counts(), quantile))
         return self
 
     def transform(self, X):
-        return self._pad_data(X, length=self.length, padding='pre', truncating='pre')
+        # X = pd.DataFrame(pad_sequences(X.values, padding=self.padding, truncating=self.truncating, dtype=self.dtype), columns=X.columns)
+        X = self._pad_data(X, self.length, self.padding, self.truncating)
+        return X
 
     def _pad_data(self, df, length, padding, truncating):
         """
         Transforms all dataframes within the data to a fixed length via padding or truncating. If padding, pad with 0s and
         Hold for the label.
 
-        :param df: a dictionary of dataframes indexed by date
+        :param df: dataframe
         :param length: target row count for the dataframes
         :param padding: {'pre', 'post'} if 'pre' then pad from the start; if 'post' pad from the end
         :param truncating: {'pre', 'post'} if 'pre' then truncate from the start; if 'post' truncate from the end
         :return: a dictionary of dataframes indexed by date
         """
 
-        def _get_padding_dates(date, length):
-            dates = []
-            for i in range(1, length + 1):
-                dates.append(pd.to_datetime(date, format='%Y%m%d') - MonthEnd(3 * i))
-            dates.reverse()
-            return dates
-
-        assert isinstance(df, dict)
+        # assert isinstance(df, dict)
         assert padding in ['pre', 'post'] and truncating in ['pre', 'post']
 
-        result = {}
+        segments = []
         for stock in tqdm(df['Stock'].unique()):
-            subset = df['Stock'] == stock
-            padding_length = length - len(df.index)
+            df_subset = df[df['Stock'] == stock]
+            padding_length = length - len(df_subset.index)
 
             if padding_length > 0:
-                # generate padding
-                value_to_pad = pd.DataFrame({k: [0] for k in df.columns})
-                value_to_pad['Decision'] = StockClass.HOLD.value
-
-                df_to_pad = pd.concat([value_to_pad] * padding_length)
-                if isinstance(df.index, pd.DatetimeIndex):
-                    df_to_pad.index = _get_padding_dates(df.index[-1 if padding == 'post' else 0], padding_length)
-
-                # add padding to df
-                df = pd.concat([df, df_to_pad] if padding == 'post' else [df_to_pad, df])
-                df = df.reset_index()
-                # padding = np.repeat(one_seq[-1], padding_length).reshape(38, padding_length).transpose()
-                # one_seq = np.concatenate([one_seq, padding])
+                # pad
+                df_to_pad = pd.DataFrame({col: [0.0] * padding_length for col in df_subset.columns})
+                if padding == 'post':
+                    segments.append(df_subset)
+                    segments.append(df_to_pad)
+                else:
+                    segments.append(df_to_pad)
+                    segments.append(df_subset)
             elif padding_length < 0:
-                # truncate df
-                df = df[:padding_length] if truncating == 'post' else df[-padding_length:]
+                # truncate
+                df_subset = df_subset[:padding_length] if truncating == 'post' else df_subset[-padding_length:]
+                segments.append(df_subset)
+            else:
+                segments.append(df_subset)
+        result = pd.concat(segments)
+        result = result.reset_index(drop=True)
 
-            assert len(df.index) == length
-
-            result[stock] = df
         return result
+
 
 # desired_length = 101
 
+if __name__ == '__main__':
+    # Parameters
+    use_augmentation = True  # Augment training data via variance scaling, may cause data leak
 
-# Parameters
-use_augmentation = True  # Augment training data via sliding window, may cause data leak
+    # Load companies quarterly reports
+    df = pd.read_csv('historical_qrs.csv')
 
-# Load companies quarterly reports
-df = pd.read_csv('historical_qrs.csv')
+    # Split training set, test set and validation set
+    train_stocks, test_stocks = train_test_split(df['Stock'].unique(), test_size=0.2, random_state=42)
+    train_data, test_data = df[df['Stock'].isin(train_stocks)], df[df['Stock'].isin(test_stocks)]
+    train_stocks, val_stocks = train_test_split(train_data['Stock'].unique(), test_size=0.25, random_state=42)
+    train_data, val_data = train_data[train_data['Stock'].isin(train_stocks)], \
+                           train_data[train_data['Stock'].isin(val_stocks)]
 
-# Split training set, test set and validation set
-train_stocks, test_stocks = train_test_split(df['Stock'].unique(), test_size=0.2, random_state=42)
-train_data, test_data = df[df['Stock'].isin(train_stocks)], df[df['Stock'].isin(test_stocks)]
-train_stocks, val_stocks = train_test_split(train_data['Stock'].unique(), test_size=0.25, random_state=42)
-train_data, val_data = train_data[train_data['Stock'].isin(train_stocks)], \
-                       train_data[train_data['Stock'].isin(val_stocks)]
+    # Preprocess data
+    train_data = clean(train_data)
+    test_data = clean(test_data)
+    val_data = clean(val_data)
 
-# Preprocess data
-train_data = clean(train_data)
-test_data = clean(test_data)
-val_data = clean(val_data)
+    # Imputation
+    # imputer = StockFundamentalDataImputer(train_data.drop(columns=['Stock', 'Quarter end']).columns)
+    imputer = StockFundamentalDataImputer(train_data.drop(columns=['Stock']).columns)
+    train_data = imputer.fit_transform(train_data)
+    test_data = imputer.transform(test_data)
+    val_data = imputer.transform(val_data)
 
-# Imputation
-imputer = StockFundamentalDataImputer(train_data.drop(columns=['Stock', 'Quarter end']).columns)
-train_data = imputer.fit_transform(train_data)
-test_data = imputer.transform(test_data)
-val_data = imputer.transform(val_data)
+    # Feature engineering
+    train_data = engineer_features(train_data)
+    test_data = engineer_features(test_data)
+    val_data = engineer_features(val_data)
 
-# Feature engineering
-train_data = engineer_features(train_data)
-test_data = engineer_features(test_data)
-val_data = engineer_features(val_data)
+    # Data augmentation
+    # if use_augmentation:
+    #     train_data = augment(train_data)
 
-# train_data.to_csv('datasets/train_data.csv', index=False)
-# train_data.plot(y=train_data.columns, kind='line')
-# # train_data.plot(x=train_data.drop(columns=['Decision']).columns, y='Decision', kind='line')
-# plt.show()
+    # Encode
+    encoder = OrdinalEncoder(handle_unknown='use_encoded_value', unknown_value=-1)
+    train_data['Stock'] = encoder.fit_transform(train_data[['Stock']])
+    test_data['Stock'] = encoder.transform(test_data[['Stock']])
+    val_data['Stock'] = encoder.transform(val_data[['Stock']])
 
-# Data augmentation
-if use_augmentation:
-    train_data = augment(train_data)
+    # Scale
+    scaler = RobustScaler()
+    features = train_data.drop(columns=['Decision']).columns
+    train_data[features] = scaler.fit_transform(train_data[features])
+    test_data[features] = scaler.transform(test_data[features])
+    val_data[features] = scaler.transform(val_data[features])
 
-# Feature selection
-selector = SelectKBest(f_classif, 30)
-val_data = selector.fit_transform(val_data.drop(columns=['Decision', 'Stock', 'Quarter end']), val_data['Decision'])
-train_data = selector.transform(train_data)
-test_data = selector.transform(test_data)
+    # Feature selection
+    # features = train_data.drop(columns=['Decision', 'Stock', 'Quarter end']).columns
+    # features = train_data.drop(columns=['Decision', 'Stock']).columns
+    # selector = SelectKBest(f_classif, 30)
+    # val_data[features] = selector.fit_transform(val_data[features], val_data['Decision'])
+    # train_data[features] = selector.transform(train_data[features])
+    # test_data[features] = selector.transform(test_data[features])
 
-# Save data
-train_data.to_csv('datasets/train_data.csv', index=False)
-test_data.to_csv('datasets/test_data.csv', index=False)
-val_data.to_csv('datasets/val_data.csv', index=False)
+    # Pad data
+    padder = PadTruncateTransformer(padding='pre', truncating='pre', dtype='float')
+    train_data = padder.fit_transform(train_data)
+    test_data = padder.transform(test_data)
+    val_data = padder.transform(val_data)
 
-# Augment training data via sliding window - may cause data leak
-# todo: Use stretching, shifting and dynamic range compression (?) instead - see data augmentation for signals
-# if augment_data:
-#     tickers = list(train_data.keys())
-#     for stock in tqdm(tickers):
-#         ticker_data_length = len(train_data[stock].index)
-#         for offset in range(1, ticker_data_length):
-#             train_data[stock + f'_{offset}'] = train_data[stock][:-offset]
+    # Save data
+    train_data.to_csv('datasets/train_data.csv', index=False)
+    test_data.to_csv('datasets/test_data.csv', index=False)
+    val_data.to_csv('datasets/val_data.csv', index=False)
 
-# Pad or truncate each df in data to desired length  # 101?
-# use only line below to return as ndarray (faster but no hard to change later on)
-# train_data = sequence.pad_sequences(train_data.values(), maxlen=desired_length, padding='pre', dtype='float',
-# truncating='pre')
-# todo: handle preprocessing within model?
+    # Extract X, y
+    y_train, X_train = train_data.pop('Decision'), train_data
+    y_test, X_test = test_data.pop('Decision'), test_data
+    y_val, X_val = val_data.pop('Decision'), val_data
 
-# save_as_x_y(train_data, X_path='data/X_train.pkl', y_path='data/y_train.pkl')
-# save_as_x_y(test_data, X_path='data/X_test.pkl', y_path='data/y_test.pkl')
-# save_as_x_y(val_data, X_path='data/X_val.pkl', y_path='data/y_val.pkl')
-# 'P/B ratio', 'P/E ratio', 'Cumulative dividends per share', 'Dividend payout ratio', 'Long-term debt to equity ratio', 'Equity to assets ratio',
-#        'Net margin',
+    # Reshape as ndarrays (n_stocks, n_timestamps, n_features)
+    X_train = X_train.values.reshape(-1, padder.length, len(X_train.columns))
+    y_train = y_train.values.reshape(-1, padder.length, 1)
+    X_test = X_test.values.reshape(-1, padder.length, len(X_test.columns))
+    y_test = y_test.values.reshape(-1, padder.length, 1)
+    X_val = X_val.values.reshape(-1, padder.length, len(X_val.columns))
+    y_val = y_val.values.reshape(-1, padder.length, 1)
+
+    save_as(X_train, 'datasets/X_train.pkl')
+    save_as(y_train, 'datasets/y_train.pkl')
+    save_as(X_test, 'datasets/X_test.pkl')
+    save_as(y_test, 'datasets/y_test.pkl')
+    save_as(X_val, 'datasets/X_val.pkl')
+    save_as(y_val, 'datasets/y_val.pkl')

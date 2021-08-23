@@ -3,12 +3,15 @@ import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
 from tensorflow.keras.models import Sequential, load_model
-from tensorflow.keras.layers import LSTM, Dense, Dropout
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras.layers import LSTM, Dense, Dropout, Masking
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.callbacks import EarlyStopping
 from keras import backend as K
 from sklearn.preprocessing import OneHotEncoder
 from tslearn.clustering import TimeSeriesKMeans
+
+from clean_data_new import PadTruncateTransformer
 
 
 class Parser:
@@ -57,7 +60,9 @@ def f1_m(y_true, y_pred):
 
 def make_model(sequence_length, feature_count):
     model = Sequential([
-        LSTM(17, return_sequences=True, input_shape=(sequence_length, feature_count)),
+        Masking(mask_value=0.0, input_shape=(sequence_length, feature_count)),
+
+        LSTM(17, return_sequences=True),
         Dropout(0.2),
 
         LSTM(8, return_sequences=True),
@@ -80,12 +85,15 @@ if not robust_test:
     with open('datasets/X_val.pkl', 'rb') as X_file, open('datasets/y_val.pkl', 'rb') as y_file:
         X_val, y_val = load(X_file), load(y_file)
 
-    X_train, y_train = np.stack(list(X_train.values())), np.stack(list(y_train.values()))
-    y_train = to_categorical(y_train, 3)
-    X_test, y_test = np.stack(list(X_test.values())), np.stack(list(y_test.values()))
-    y_test = to_categorical(y_test, 3)
-    X_val, y_val = np.stack(list(X_val.values())), np.stack(list(y_val.values()))
-    y_val = to_categorical(y_val, 3)
+    # X_train, y_train = np.stack(list(X_train.values())), np.stack(list(y_train.values()))
+    y_train = (np.arange(y_train.max()+1) == y_train[..., None]).astype(int)
+    y_train = y_train.reshape(-1, y_train.shape[1], y_train.shape[3])
+    # X_test, y_test = np.stack(list(X_test.values())), np.stack(list(y_test.values()))
+    y_test = (np.arange(y_test.max()+1) == y_test[..., None]).astype(int)
+    y_test = y_test.reshape(-1, y_test.shape[1], y_test.shape[3])
+    # X_val, y_val = np.stack(list(X_val.values())), np.stack(list(y_val.values()))
+    y_val = (np.arange(y_val.max()+1) == y_val[..., None]).astype(int)
+    y_val = y_val.reshape(-1, y_val.shape[1], y_val.shape[3])
 
     # X_train, X_test, y_train, y_test = train_test_split(
     #     X,
@@ -116,7 +124,7 @@ else:
     # Parse test data and evaluate
     with open('datasets/X_test.pkl', 'rb') as X_file, open('datasets/y_test.pkl', 'rb') as y_file:
         X_test2, y_test2 = load(X_file), load(y_file)
-    X_test2, y_test2 = np.stack(list(X_test2.values())), np.stack(list(y_test2.values()))
+    # X_test2, y_test2 = np.stack(list(X_test2.values())), np.stack(list(y_test2.values()))
     y_test2 = to_categorical(y_test2, 3)
 
     model = load_model('saved-models/LSTM_model.hdf5',
