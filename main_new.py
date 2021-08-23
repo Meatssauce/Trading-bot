@@ -5,6 +5,7 @@ from sklearn.model_selection import train_test_split
 from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.keras.layers import LSTM, Dense, Dropout, Masking
+from tensorflow.keras.regularizers import L1L2
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.callbacks import EarlyStopping
 from keras import backend as K
@@ -59,14 +60,15 @@ def f1_m(y_true, y_pred):
 
 
 def make_model(sequence_length, feature_count):
+    regularisers = [L1L2(l1=0.0, l2=0.0), L1L2(l1=0.01, l2=0.0), L1L2(l1=0.0, l2=0.01), L1L2(l1=0.01, l2=0.01)]
     model = Sequential([
         Masking(mask_value=0.0, input_shape=(sequence_length, feature_count)),
 
-        LSTM(17, return_sequences=True),
-        Dropout(0.2),
+        LSTM(15, return_sequences=True, stateful=False, kernel_regularizer=L1L2(l1=0.1, l2=0.1)),
+        Dropout(0.1),
 
-        LSTM(8, return_sequences=True),
-        Dropout(0.2),
+        # LSTM(8, return_sequences=True, stateful=True),
+        # Dropout(0.2),
 
         Dense(3, activation='softmax')
     ])
@@ -109,7 +111,7 @@ if not robust_test:
 
     # Fit model
     model = make_model(X_train.shape[1], X_train.shape[2])
-    early_stopping = EarlyStopping(monitor='val_loss', patience=50, min_delta=0, verbose=1, restore_best_weights=True)
+    early_stopping = EarlyStopping(monitor='val_f1_m', mode='max', patience=10, min_delta=0, verbose=1, restore_best_weights=True)
     model.fit(X_train, y_train, validation_data=(X_val, y_val), batch_size=32, epochs=500, callbacks=[early_stopping])
 
     # X_test = parser.transform(X_test)
