@@ -1,20 +1,13 @@
-import os
-import random
 from enum import Enum
 import pandas as pd
 import numpy as np
 from category_encoders import BinaryEncoder
-from sklearn.preprocessing import OrdinalEncoder, RobustScaler, MinMaxScaler
+from pandas_profiling import ProfileReport
+from sklearn.preprocessing import OrdinalEncoder, RobustScaler, MinMaxScaler, StandardScaler
 from sklearn.base import TransformerMixin
-from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.impute import SimpleImputer
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
-from pickle import dump, load
-from pandas.tseries.offsets import MonthEnd
-import yfinance as yf
-import matplotlib.pyplot as plt
-from tensorflow.keras.preprocessing.sequence import pad_sequences
 
 """
 Idea:
@@ -103,45 +96,11 @@ class OutlierMinMaxTransformer(TransformerMixin):
 
     def transform(self, X):
         for col, q1, q3 in zip(X.columns, self.q1, self.q3):
-            X[col] = np.where(X[col] < q1, q1, X[col])
-            X[col] = np.where(X[col] > q3, q3, X[col])
+            iqr = q3 - q1
+            min_val, max_val = (q1 - 1.5 * iqr), (q3 + 1.5 * iqr)
+            X[col] = np.where(X[col] < min_val, min_val, X[col])
+            X[col] = np.where(X[col] > max_val, max_val, X[col])
         return X
-
-
-def class_creation(df, threshold=0.03):
-    """
-    Creates classes of:
-    - hold(0)
-    - buy(1)
-    - sell(2)
-
-    Threshold can be changed to fit whatever price percentage change is desired
-    """
-    if df['Price high'] >= threshold and df['Price low'] >= threshold:
-        # Buys
-        return StockClass.BUY.value
-
-    elif df['Price high'] <= -threshold and df['Price low'] <= -threshold:
-        # Sells
-        return StockClass.SELL.value
-
-    else:
-        # Holds
-        return StockClass.HOLD.value
-
-
-def save_as(obj, path):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, 'wb') as file:
-        dump(obj, file)
-
-
-def save_as_x_y(data, X_path, y_path):
-    y = {k: df.pop('Label') for k, df in data.items()}
-    X = data
-
-    save_as(X, X_path)
-    save_as(y, y_path)
 
 
 def clean(df: pd.DataFrame) -> pd.DataFrame:
@@ -288,12 +247,14 @@ class PaddingTransformer(TransformerMixin):
 
 
 class Parser(TransformerMixin):
-    def __init__(self, **kwargs):
+    def __init__(self, return_full_df: bool = False, **kwargs):
         super().__init__(**kwargs)
+        self.return_full_df = return_full_df
         self.simple_imputer = None
         self.interpolation_imputer = None
         self.outlier_transformer = None
         self.scaler = None
+        self.encoder = None
         self.padder = None
 
     def fit_transform(self, data, **fit_params):
@@ -323,7 +284,7 @@ class Parser(TransformerMixin):
         # Scale
         # todo: switch to MinMaxScaler, try StandardScaler
         features = data.drop(columns=['Label']).columns
-        self.scaler = MinMaxScaler()
+        self.scaler = StandardScaler()
         data[features] = self.scaler.fit_transform(data[features])
 
         # Feature selection
@@ -337,15 +298,19 @@ class Parser(TransformerMixin):
         # # Reset index and remove useless features
         # df = df.sort_index(level=df.index.names).reset_index()
         # del df['Quarter end']
-        #
-        # # Encode
-        # # todo: scale (and normalise) categorical variables? Never!
-        # encoder = OrdinalEncoder(handle_unknown='use_encoded_value', unknown_value=-1)
-        # train_data['Stock'] = encoder.fit_transform(train_data[['Stock']])
+
+        # Encode
+        # todo: scale (and normalise) categorical variables? Never!
+        data['Stock'] = data.index.get_level_values('Stock')
+        self.encoder = BinaryEncoder()
+        data = self.encoder.fit_transform(data)
 
         # Pad data
         self.padder = PaddingTransformer(padding='pre', truncating='pre', dtype='float')
         data = self.padder.fit_transform(data)
+
+        if self.return_full_df:
+            return data
 
         # Extract X, y
         y, X = data.pop('Label'), data
@@ -393,14 +358,17 @@ class Parser(TransformerMixin):
         # # Reset index and remove useless features
         # df = df.sort_index(level=df.index.names).reset_index()
         # del df['Quarter end']
-        #
-        # # Encode
-        # # todo: scale (and normalise) categorical variables? Never!
-        # encoder = OrdinalEncoder(handle_unknown='use_encoded_value', unknown_value=-1)
-        # train_data['Stock'] = encoder.fit_transform(train_data[['Stock']])
+
+        # Encode stock to capture characteristic behaviour
+        # todo: scale (and normalise) categorical variables? Never!
+        data['Stock'] = data.index.get_level_values('Stock')
+        data = self.encoder.transform(data)
 
         # Pad data
         data = self.padder.transform(data)
+
+        if self.return_full_df:
+            return data
 
         # Extract X, y
         y, X = data.pop('Label'), data
@@ -413,8 +381,8 @@ class Parser(TransformerMixin):
 
 
 if __name__ == '__main__':
-    # Parameters
-    use_augmentation = True  # Augment training data via variance scaling, may cause data leak
+    # # Parameters
+    # use_augmentation = True  # Augment training data via variance scaling, may cause data leak
 
     # Load companies quarterly reports
     df = pd.read_csv('historical_qrs.csv')
@@ -422,95 +390,16 @@ if __name__ == '__main__':
     # Clean data
     df = clean(df)
 
-    # Split training set, test set and validation set
+    # Split training set, test set and validation set (6:2:2)
     stocks = df.index.get_level_values('Stock').unique()
     train_stocks, test_stocks = train_test_split(stocks, test_size=0.2, shuffle=True, random_state=42)
-    train_data, test_data = df.loc[train_stocks, :], df.loc[test_stocks, :]
+    test_data = df.loc[test_stocks, :]
 
-    stocks = train_data.index.get_level_values('Stock').unique()
-    train_stocks, val_stocks = train_test_split(stocks, test_size=0.25, shuffle=True, random_state=42)
+    train_stocks, val_stocks = train_test_split(train_stocks, test_size=0.25, shuffle=True, random_state=42)
     train_data, val_data = df.loc[train_stocks, :], df.loc[val_stocks, :]
 
-    # Imputation
-    print("Imputing...")
-    # imputer = StockFundamentalDataImputer(train_data.drop(columns=['Stock', 'Quarter end']).columns)
-    imputer = StocksImputer(method='linear', limit_direction='both')
-    train_data = imputer.fit_transform(train_data)
-    test_data = imputer.transform(test_data)
-    val_data = imputer.transform(val_data)
+    parser = Parser(return_full_df=True)
+    train_data = parser.fit_transform(train_data)
 
-    # Remove outliers in absolute values?
-
-    # Data augmentation
-    # if use_augmentation:
-    #     train_data = augment(train_data)
-
-    # Feature engineering
-    print("Engineering features...")
-    train_data = engineer_features(train_data, add_stock_info=False)
-    test_data = engineer_features(test_data, add_stock_info=False)
-    val_data = engineer_features(val_data, add_stock_info=False)
-
-    # Remove outliers
-    outlier_handler = OutlierMinMaxTransformer()
-    train_data = outlier_handler.fit_transform(train_data)
-    test_data = outlier_handler.transform(test_data)
-    val_data = outlier_handler.transform(val_data)
-
-    # Scale
-    # todo: switch to MinMaxScaler, try StandardScaler
-    scaler = MinMaxScaler()
-    features = train_data.drop(columns=['Label']).columns
-    train_data[features] = scaler.fit_transform(train_data[features])
-    test_data[features] = scaler.transform(test_data[features])
-    val_data[features] = scaler.transform(val_data[features])
-
-    # Feature selection
-    # features = train_data.drop(columns=['Label', 'Stock', 'Quarter end']).columns
-    # features = train_data.drop(columns=['Label', 'Stock']).columns
-    # selector = SelectKBest(f_classif, 30)
-    # val_data[features] = selector.fit_transform(val_data[features], val_data['Label'])
-    # train_data[features] = selector.transform(train_data[features])
-    # test_data[features] = selector.transform(test_data[features])
-
-    # # Reset index and remove useless features
-    # df = df.sort_index(level=df.index.names).reset_index()
-    # del df['Quarter end']
-    #
-    # # Encode
-    # # todo: scale (and normalise) categorical variables? Never!
-    # encoder = OrdinalEncoder(handle_unknown='use_encoded_value', unknown_value=-1)
-    # train_data['Stock'] = encoder.fit_transform(train_data[['Stock']])
-    # test_data['Stock'] = encoder.transform(test_data[['Stock']])
-    # val_data['Stock'] = encoder.transform(val_data[['Stock']])
-
-    # Pad data
-    padder = PaddingTransformer(padding='pre', truncating='pre', dtype='float')
-    train_data = padder.fit_transform(train_data)
-    test_data = padder.transform(test_data)
-    val_data = padder.transform(val_data)
-
-    # Save data
-    train_data.to_csv('datasets/train_data.csv')
-    test_data.to_csv('datasets/test_data.csv')
-    val_data.to_csv('datasets/val_data.csv')
-
-    # Extract X, y
-    y_train, X_train = train_data.pop('Label'), train_data
-    y_test, X_test = test_data.pop('Label'), test_data
-    y_val, X_val = val_data.pop('Label'), val_data
-
-    # Reshape as ndarrays (n_stocks, n_timestamps, n_features)
-    X_train = X_train.values.reshape(-1, padder.length, len(X_train.columns))
-    y_train = y_train.values.reshape(-1, padder.length, 1)
-    X_test = X_test.values.reshape(-1, padder.length, len(X_test.columns))
-    y_test = y_test.values.reshape(-1, padder.length, 1)
-    X_val = X_val.values.reshape(-1, padder.length, len(X_val.columns))
-    y_val = y_val.values.reshape(-1, padder.length, 1)
-
-    # save_as(X_train, 'datasets/X_train.pkl')
-    # save_as(y_train, 'datasets/y_train.pkl')
-    # save_as(X_test, 'datasets/X_test.pkl')
-    # save_as(y_test, 'datasets/y_test.pkl')
-    # save_as(X_val, 'datasets/X_val.pkl')
-    # save_as(y_val, 'datasets/y_val.pkl')
+    profile = ProfileReport(train_data, minimal=True)
+    profile.to_file('PostProcessReport.html')
