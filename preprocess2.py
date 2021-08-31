@@ -1,13 +1,13 @@
 from enum import Enum
 import pandas as pd
 import numpy as np
-from category_encoders import BinaryEncoder
 from pandas_profiling import ProfileReport
 from sklearn.preprocessing import OrdinalEncoder, RobustScaler, MinMaxScaler, StandardScaler
 from sklearn.base import TransformerMixin
 from sklearn.impute import SimpleImputer
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
+from category_encoders import BinaryEncoder
 
 """
 Idea:
@@ -45,8 +45,8 @@ class StocksImputer(TransformerMixin):
         return df
 
 
-class OutlierNullifier(TransformerMixin):
-    def __init__(self, **kwargs):
+class OutlierTransformer(TransformerMixin):
+    def __init__(self, columns=None, fill: str = 'median', **kwargs):
         """
         Create a transformer to remove outliers.
 
@@ -54,48 +54,78 @@ class OutlierNullifier(TransformerMixin):
             object: to be used as a transformer method as part of Pipeline()
         """
 
-        self.quantiles = {}
+        self.fill = fill
+        self.columns = columns
+        self.type = None
+        self.n_columns = None
+        self.q1s = None
+        self.q3s = None
+        self.medians = None
+        self.means = None
 
-    def fit(self, X, y=None, **fit_params):
+    def fit(self, X: np.ndarray or pd.DataFrame, y=None, **fit_params):
+        self.type = type(X)
+        self.n_columns = X.shape[1]
+
         if isinstance(X, np.ndarray):
             for i in range(X.shape[1]):
-                self.quantiles[i] = np.quantile(X[i], [0.25, 0.75])
+                self.q1s[i], self.q3s[i] = np.quantile(X[i], [0.25, 0.75])
+                self.medians[i] = np.median(X[i])
+                self.means[i] = np.mean(X[i])
+
+        elif isinstance(X, pd.DataFrame):
+            if self.columns is None:
+                self.columns = X.columns
+
+            self.q1s = X[self.columns].quantile(0.25)
+            self.q3s = X[self.columns].quantile(0.75)
+            self.medians = X[self.columns].median()
+            self.means = X[self.columns].mean()
+
         else:
-            for column in X.columns:
-                self.quantiles[column] = X[column].quantile(0.25), X[column].quantile(0.75)
+            raise TypeError(f'Invalid input type. Expected np.ndarray or pd.DataFrame but got {type(X)}')
 
         return self
 
-    def transform(self, X, y=None):
-        if isinstance(X, np.ndarray):
-            for i in range(X.shape[1]):
-                q1, q3 = self.quantiles[i]
-                iqr = q3 - q1
-                X[i] = np.where((X[i] < q1 - 1.5 * iqr) | (X[i] > q3 + 1.5 * iqr), np.nan, X[i])
-        else:
-            for column in X.columns:
-                q1, q3 = self.quantiles[column]
-                iqr = q3 - q1
-                X[column] = np.where((X[column] < q1 - 1.5 * iqr) | (X[column] > q3 + 1.5 * iqr), np.nan, X[column])
+    def transform(self, X: np.ndarray or pd.DataFrame):
+        if not isinstance(X, self.type):
+            raise TypeError(f'Inconsistent input type. Expected {self.type} but got {type(X)}')
+        if isinstance(X, np.ndarray) and X.shape[1] != self.n_columns:
+            raise TypeError(f'Inconsistent input shape. Expected {self.n_columns} but got {X.shape[1]}')
+
+        # Find and replace outliers
+        idx = X.shape[1] if self.columns is None else self.columns
+        for i, q1, q3 in zip(idx, self.q1s, self.q3s):
+            iqr = q3 - q1
+            min_val, max_val = q1 - 1.5 * iqr, q3 + 1.5 * iqr
+
+            if self.fill == 'median':
+                X[i] = np.where((X[i] < min_val) | (X[i] > max_val), self.medians[i], X[i])
+            elif self.fill == 'mean':
+                X[i] = np.where((X[i] < min_val) | (X[i] > max_val), self.means[i], X[i])
+            elif self.fill == 'nan':
+                X[i] = np.where((X[i] < min_val) | (X[i] > max_val), np.nan, X[i])
+            elif self.fill == 'nearest':
+                X[i] = np.where(X[i] < min_val, min_val, X[i])
+                X[i] = np.where(X[i] > max_val, max_val, X[i])
+            else:
+                raise ValueError('Invalid fill method')
 
         return X
-
-    def fit_transform(self, X, y=None, **fit_params):
-        return self.fit(X, y, **fit_params).transform(X, y)
 
 
 class OutlierMinMaxTransformer(TransformerMixin):
     def __init__(self):
-        self.q1 = None
-        self.q3 = None
+        self.q1s = None
+        self.q3s = None
 
     def fit(self, X, y=None):
-        self.q1 = X.quantile(0.25).tolist()
-        self.q3 = X.quantile(0.75).tolist()
+        self.q1s = X.quantile(0.25).tolist()
+        self.q3s = X.quantile(0.75).tolist()
         return self
 
     def transform(self, X):
-        for col, q1, q3 in zip(X.columns, self.q1, self.q3):
+        for col, q1, q3 in zip(X.columns, self.q1s, self.q3s):
             iqr = q3 - q1
             min_val, max_val = (q1 - 1.5 * iqr), (q3 + 1.5 * iqr)
             X[col] = np.where(X[col] < min_val, min_val, X[col])
@@ -278,13 +308,13 @@ class Parser(TransformerMixin):
         data = engineer_features(data, add_stock_info=False)
 
         # Remove outliers
-        self.outlier_transformer = OutlierMinMaxTransformer()
+        self.outlier_transformer = OutlierTransformer(columns=data.drop(columns=['Label']).columns, fill='median')
         data = self.outlier_transformer.fit_transform(data)
 
         # Scale
         # todo: switch to MinMaxScaler, try StandardScaler
         features = data.drop(columns=['Label']).columns
-        self.scaler = StandardScaler()
+        self.scaler = MinMaxScaler()
         data[features] = self.scaler.fit_transform(data[features])
 
         # Feature selection
@@ -299,11 +329,11 @@ class Parser(TransformerMixin):
         # df = df.sort_index(level=df.index.names).reset_index()
         # del df['Quarter end']
 
-        # Encode
-        # todo: scale (and normalise) categorical variables? Never!
-        data['Stock'] = data.index.get_level_values('Stock')
-        self.encoder = BinaryEncoder()
-        data = self.encoder.fit_transform(data)
+        # # Encode
+        # # todo: scale (and normalise) categorical variables? Never!
+        # data['Stock'] = data.index.get_level_values('Stock')
+        # self.encoder = BinaryEncoder()
+        # data = self.encoder.fit_transform(data)
 
         # Pad data
         self.padder = PaddingTransformer(padding='pre', truncating='pre', dtype='float')
@@ -359,10 +389,10 @@ class Parser(TransformerMixin):
         # df = df.sort_index(level=df.index.names).reset_index()
         # del df['Quarter end']
 
-        # Encode stock to capture characteristic behaviour
-        # todo: scale (and normalise) categorical variables? Never!
-        data['Stock'] = data.index.get_level_values('Stock')
-        data = self.encoder.transform(data)
+        # # Encode stock to capture characteristic behaviour
+        # # todo: scale (and normalise) categorical variables? Never!
+        # data['Stock'] = data.index.get_level_values('Stock')
+        # data = self.encoder.transform(data)
 
         # Pad data
         data = self.padder.transform(data)

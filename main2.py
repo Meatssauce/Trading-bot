@@ -67,7 +67,8 @@ def make_model(timestamps, features):
     model = Sequential([
         Masking(mask_value=0., input_shape=(timestamps, features)),
 
-        LSTM(15, return_sequences=True, stateful=False, kernel_regularizer=L1L2(l1=0.001, l2=0.001)),
+        # LSTM(15, return_sequences=True, stateful=False, kernel_regularizer=L1L2(l1=0.001, l2=0.001)),
+        LSTM(15, return_sequences=True, stateful=False),
         Dropout(0.1),
 
         # LSTM(8, return_sequences=True, stateful=True),
@@ -109,9 +110,9 @@ if __name__ == '__main__':
 
     # Fit model
     model = make_model(X_train.shape[1], X_train.shape[2])
-    early_stopping = EarlyStopping(monitor='loss', patience=10, min_delta=0, verbose=1,
+    early_stopping = EarlyStopping(monitor='val_loss', patience=10, min_delta=0, verbose=1,
                                    restore_best_weights=True)
-    history = model.fit(X_train, y_train, validation_data=(X_val, y_val), batch_size=64, epochs=80,
+    history = model.fit(X_train, y_train, validation_data=(X_val, y_val), batch_size=64, epochs=300,
                         callbacks=[early_stopping])
 
     # Generate new id, then save model, parser and relevant files
@@ -135,6 +136,7 @@ if __name__ == '__main__':
     plt.xlabel('epoch')
     plt.legend(['train', 'validation'], loc='upper right')
     plt.savefig(save_directory + 'accuracy.png')
+    plt.clf()
 
     # Plot loss
     plt.plot(history.history['loss'])
