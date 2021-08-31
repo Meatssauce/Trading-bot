@@ -141,7 +141,7 @@ def clean(df: pd.DataFrame) -> pd.DataFrame:
     df['Stock'] = np.where((df['Stock'] == 'None') | (df['Stock'] == ''), np.nan, df['Stock'])
 
     # Drop invalid rows
-    df = df.dropna(subset=['Stock', 'Quarter end'], how='any')
+    df = df.dropna(subset=['Stock', 'Quarter end', 'Price'], how='any')
 
     # Set and sort multi-index
     df = df.set_index(['Stock', 'Quarter end'])
@@ -425,7 +425,7 @@ if __name__ == '__main__':
     train_stocks, test_stocks = train_test_split(stocks, test_size=0.2, shuffle=True, random_state=42)
     test_data = df.loc[test_stocks, :]
 
-    train_stocks, val_stocks = train_test_split(train_stocks, test_size=0.25, shuffle=True, random_state=42)
+    train_stocks, val_stocks = train_test_split(train_stocks, test_size=0.3, shuffle=True, random_state=42)
     train_data, val_data = df.loc[train_stocks, :], df.loc[val_stocks, :]
 
     parser = Parser(return_full_df=True)

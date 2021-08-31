@@ -10,6 +10,7 @@ from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.layers import LSTM, Dense, Dropout, Masking
 from tensorflow.keras.regularizers import L1L2
 from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.metrics import RootMeanSquaredError, MeanAbsoluteError
 # from keras import backend as K
 # from sklearn.preprocessing import OneHotEncoder, MinMaxScaler
 # from tslearn.clustering import TimeSeriesKMeans
@@ -68,16 +69,17 @@ def make_model(timestamps, features):
         Masking(mask_value=0., input_shape=(timestamps, features)),
 
         # LSTM(15, return_sequences=True, stateful=False, kernel_regularizer=L1L2(l1=0.001, l2=0.001)),
-        LSTM(15, return_sequences=True, stateful=False),
-        Dropout(0.1),
+        LSTM(15, return_sequences=True, stateful=False, kernel_regularizer=L1L2(l1=0.01, l2=0.01)),
+        Dropout(0.3),
 
-        # LSTM(8, return_sequences=True, stateful=True),
-        # Dropout(0.2),
+        LSTM(8, stateful=False, kernel_regularizer=L1L2(l1=0.01, l2=0.01)),
+        Dropout(0.3),
 
+        Dense(8, 'relu', use_bias=True),
         Dense(1)
     ])
     optimizer = optimizers.Adam(clipvalue=0.5)  # to prevent exploding gradient
-    model.compile(optimizer=optimizer, loss='mean_squared_error', metrics=['mean_squared_error'])
+    model.compile(optimizer=optimizer, loss='mse', metrics=['mean_squared_error', RootMeanSquaredError()])
     model.summary()
     return model
 
@@ -97,22 +99,23 @@ if __name__ == '__main__':
 
     # Split training set, test set and validation set (6:2:2)
     stocks = df.index.get_level_values('Stock').unique()
-    train_stocks, test_stocks = train_test_split(stocks, test_size=0.2, shuffle=True, random_state=42)
+    rest, test_stocks = train_test_split(stocks, test_size=0.2, shuffle=True, random_state=42)
     test_data = df.loc[test_stocks, :]
+    train_data = df.loc[rest, :]
 
-    train_stocks, val_stocks = train_test_split(train_stocks, test_size=0.25, shuffle=True, random_state=42)
-    train_data, val_data = df.loc[train_stocks, :], df.loc[val_stocks, :]
+    # train_stocks, val_stocks = train_test_split(rest, test_size=0.25, shuffle=True, random_state=42)
+    # train_data, val_data = df.loc[train_stocks, :], df.loc[val_stocks, :]
 
     # Preprocess
     parser = Parser()
     X_train, y_train = parser.fit_transform(train_data)
-    X_val, y_val = parser.transform(val_data)
+    # X_val, y_val = parser.transform(val_data)
 
     # Fit model
     model = make_model(X_train.shape[1], X_train.shape[2])
-    early_stopping = EarlyStopping(monitor='val_loss', patience=10, min_delta=0, verbose=1,
+    early_stopping = EarlyStopping(monitor='val_loss', patience=20, min_delta=0, verbose=1,
                                    restore_best_weights=True)
-    history = model.fit(X_train, y_train, validation_data=(X_val, y_val), batch_size=64, epochs=300,
+    history = model.fit(X_train, y_train, validation_split=0.25, batch_size=64, epochs=600,
                         callbacks=[early_stopping])
 
     # Generate new id, then save model, parser and relevant files
