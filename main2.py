@@ -69,13 +69,13 @@ def make_model(timestamps, features):
         Masking(mask_value=0., input_shape=(timestamps, features)),
 
         # LSTM(15, return_sequences=True, stateful=False, kernel_regularizer=L1L2(l1=0.001, l2=0.001)),
-        LSTM(15, return_sequences=True, stateful=False, kernel_regularizer=L1L2(l1=0.01, l2=0.01)),
+        LSTM(50, return_sequences=True, stateful=False, kernel_regularizer=L1L2(l1=0.01, l2=0.01)),
         Dropout(0.3),
 
-        LSTM(8, stateful=False, kernel_regularizer=L1L2(l1=0.01, l2=0.01)),
+        LSTM(10, return_sequences=False, stateful=False, kernel_regularizer=L1L2(l1=0.01, l2=0.01)),
         Dropout(0.3),
-
-        Dense(8, 'relu', use_bias=True),
+        #
+        # Dense(8, 'relu'),
         Dense(1)
     ])
     optimizer = optimizers.Adam(clipvalue=0.5)  # to prevent exploding gradient
@@ -113,9 +113,9 @@ if __name__ == '__main__':
 
     # Fit model
     model = make_model(X_train.shape[1], X_train.shape[2])
-    early_stopping = EarlyStopping(monitor='val_loss', patience=20, min_delta=0, verbose=1,
+    early_stopping = EarlyStopping(monitor='val_loss', patience=10, min_delta=0, verbose=1,
                                    restore_best_weights=True)
-    history = model.fit(X_train, y_train, validation_split=0.25, batch_size=64, epochs=600,
+    history = model.fit(X_train, y_train, validation_split=0.25, batch_size=64, epochs=35,
                         callbacks=[early_stopping])
 
     # Generate new id, then save model, parser and relevant files
@@ -127,8 +127,8 @@ if __name__ == '__main__':
     model.save(save_directory + 'LSTM_regression_model.hdf5')
     with open(save_directory + 'LSTM_regression_parser', 'wb') as f:
         dump(parser, f, compress=3)
-    with open(save_directory + 'train_history', 'wb') as f:
-        dump(history.history, f, compress=3)
+    # with open(save_directory + 'train_history', 'wb') as f:
+    #     dump(history.history, f, compress=3)
     pd.DataFrame(history.history).to_csv(save_directory + 'train_history.csv')
 
     # Plot accuracy

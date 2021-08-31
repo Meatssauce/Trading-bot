@@ -185,6 +185,7 @@ def engineer_features(df: pd.DataFrame, add_stock_info: bool = False):
 
     # Append new dataframe to columns
     df = pd.concat([df, df_pct_delta], axis=1)
+    # df = df_pct_delta
 
     idx_to_drop = []
     for stock in tqdm(df.index.get_level_values('Stock').unique()):
