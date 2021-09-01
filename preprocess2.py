@@ -2,6 +2,7 @@ from enum import Enum
 import pandas as pd
 import numpy as np
 from pandas_profiling import ProfileReport
+from sklearn.decomposition import PCA
 from sklearn.preprocessing import OrdinalEncoder, RobustScaler, MinMaxScaler, StandardScaler
 from sklearn.base import TransformerMixin
 from sklearn.impute import SimpleImputer
@@ -285,6 +286,7 @@ class Parser(TransformerMixin):
         self.interpolation_imputer = None
         self.outlier_transformer = None
         self.scaler = None
+        self.pca = None
         self.encoder = None
         self.padder = None
 
@@ -319,6 +321,10 @@ class Parser(TransformerMixin):
         data[features] = self.scaler.fit_transform(data[features])
 
         # Feature selection
+        self.pca = PCA(0.99)
+        y = data['Label']
+        data = pd.DataFrame(self.pca.fit_transform(data[features]), index=data.index)
+        data['Label'] = y
         # features = train_data.drop(columns=['Label', 'Stock', 'Quarter end']).columns
         # features = train_data.drop(columns=['Label', 'Stock']).columns
         # selector = SelectKBest(f_classif, 30)
@@ -379,6 +385,9 @@ class Parser(TransformerMixin):
         data[features] = self.scaler.transform(data[features])
 
         # Feature selection
+        y = data['Label']
+        data = pd.DataFrame(self.pca.transform(data[features]), index=data.index)
+        data['Label'] = y
         # features = train_data.drop(columns=['Label', 'Stock', 'Quarter end']).columns
         # features = train_data.drop(columns=['Label', 'Stock']).columns
         # selector = SelectKBest(f_classif, 30)

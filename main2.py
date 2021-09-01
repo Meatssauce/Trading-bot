@@ -69,17 +69,17 @@ def make_model(timestamps, features):
         Masking(mask_value=0., input_shape=(timestamps, features)),
 
         # LSTM(15, return_sequences=True, stateful=False, kernel_regularizer=L1L2(l1=0.001, l2=0.001)),
-        LSTM(50, return_sequences=True, stateful=False, kernel_regularizer=L1L2(l1=0.01, l2=0.01)),
+        LSTM(50, return_sequences=True, stateful=False, kernel_regularizer=L1L2(l1=0.01, l2=0.1)),
         Dropout(0.3),
 
-        LSTM(10, return_sequences=False, stateful=False, kernel_regularizer=L1L2(l1=0.01, l2=0.01)),
+        LSTM(25, return_sequences=False, stateful=False, kernel_regularizer=L1L2(l1=0.01, l2=0.1)),
         Dropout(0.3),
         #
         # Dense(8, 'relu'),
         Dense(1)
     ])
     optimizer = optimizers.Adam(clipvalue=0.5)  # to prevent exploding gradient
-    model.compile(optimizer=optimizer, loss='mse', metrics=['mean_squared_error', RootMeanSquaredError()])
+    model.compile(optimizer=optimizer, loss='mse', metrics=[RootMeanSquaredError(), MeanAbsoluteError()])
     model.summary()
     return model
 
@@ -132,10 +132,10 @@ if __name__ == '__main__':
     pd.DataFrame(history.history).to_csv(save_directory + 'train_history.csv')
 
     # Plot accuracy
-    plt.plot(history.history['mean_squared_error'])
-    plt.plot(history.history['val_mean_squared_error'])
+    plt.plot(history.history['mean_absolute_error'])
+    plt.plot(history.history['val_mean_absolute_error'])
     plt.title('model accuracy')
-    plt.ylabel('mean squared error')
+    plt.ylabel('mean absolute error')
     plt.xlabel('epoch')
     plt.legend(['train', 'validation'], loc='upper right')
     plt.savefig(save_directory + 'accuracy.png')
@@ -151,10 +151,10 @@ if __name__ == '__main__':
     plt.savefig(save_directory + 'loss.png')
 
     # Evaluate
-    # run_id = 792
-    # with open(f'saved-models/{run_id}/LSTM_regression_parser', 'rb') as f:
-    #     parser = load(f)
-    # model = load_model(f'saved-models/{run_id}/LSTM_regression_model.hdf5')
+    run_id = 523
+    with open(f'saved-models/{run_id}/LSTM_regression_parser', 'rb') as f:
+        parser = load(f)
+    model = load_model(f'saved-models/{run_id}/LSTM_regression_model.hdf5')
     X_test, y_test = parser.transform(test_data)
     scores = model.evaluate(X_test, y_test)
     try:

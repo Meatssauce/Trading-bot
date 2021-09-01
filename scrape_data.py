@@ -26,3 +26,7 @@ for tag in tqdm(soup.findAll('a', attrs={'href': re.compile('^/web/'), 'title': 
 
 with open('datasets/qr_by_tickers.pkl', 'wb') as fp:
     dump(qr_by_tickers, fp)
+
+# todo: remove average market trends from stock price for each stock for the specific period span by the data
+# todo: try to classify whether a stock will perform above or below market average for next quarter
+# todo: try to classfiy if a stock will raise or fall by a specific amount for the next quarter
