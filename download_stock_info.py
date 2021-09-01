@@ -1,4 +1,6 @@
 from collections import defaultdict
+
+import numpy as np
 from tqdm import tqdm
 
 from pandas_datareader import data as pdr
@@ -17,10 +19,25 @@ if __name__ == '__main__':
 
     # Download info each stock over its period
     tickers = yf.Tickers(' '.join(stocks))
-    info_data = defaultdict(list)
+    info_data = []
     for symbol, ticker in tqdm(tickers.tickers.items()):
-        info_data['ticker'].append(symbol)
-        for key, val in ticker.info.items():
-            info_data[key].append(val)
-    df_info = pd.DataFrame.from_dict(info_data)
+        info = ticker.info
+        if info is None:
+            info = {}
+        info['ticker'] = symbol
+        info_data.append(info)
+
+    from joblib import dump
+    with open('stockInfoTemp', 'wb') as f:
+        dump(info_data, f)
+
+    info_data_dict = defaultdict(list)
+    max_info = max(info_data, key=lambda x: len(x))
+    for info in info_data:
+        for col in max_info:
+            if col in info:
+                info_data_dict[col].append(info[col])
+            else:
+                info_data.append(np.nan)
+    df_info = pd.DataFrame.from_dict(info_data_dict)
     df_info.to_csv('stock_info.csv', index=False)
