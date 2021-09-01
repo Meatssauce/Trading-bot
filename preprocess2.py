@@ -315,7 +315,7 @@ class Parser(TransformerMixin):
         data = self.outlier_transformer.fit_transform(data)
 
         # Scale
-        # todo: switch to MinMaxScaler, try StandardScaler
+        # todo: try StandardScaler
         features = data.drop(columns=['Label']).columns
         self.scaler = MinMaxScaler()
         data[features] = self.scaler.fit_transform(data[features])
@@ -337,7 +337,6 @@ class Parser(TransformerMixin):
         # del df['Quarter end']
 
         # # Encode
-        # # todo: scale (and normalise) categorical variables? Never!
         # data['Stock'] = data.index.get_level_values('Stock')
         # self.encoder = BinaryEncoder()
         # data = self.encoder.fit_transform(data)
@@ -380,7 +379,6 @@ class Parser(TransformerMixin):
         data = self.outlier_transformer.transform(data)
 
         # Scale
-        # todo: switch to MinMaxScaler, try StandardScaler
         features = data.drop(columns=['Label']).columns
         data[features] = self.scaler.transform(data[features])
 
@@ -400,7 +398,6 @@ class Parser(TransformerMixin):
         # del df['Quarter end']
 
         # # Encode stock to capture characteristic behaviour
-        # # todo: scale (and normalise) categorical variables? Never!
         # data['Stock'] = data.index.get_level_values('Stock')
         # data = self.encoder.transform(data)
 
