@@ -295,12 +295,12 @@ if __name__ == '__main__':
 
     # Load companies quarterly reports
     try:
-        df = pd.read_csv('historical_qrs.csv')
+        df = pd.read_csv('datasets/historical_qrs.csv')
         df = clean(df)
     except Exception:
-        df = pd.read_csv('historical_qrs.csv')
+        df = pd.read_csv('datasets/historical_qrs.csv')
         df = clean(df)
-        df.to_csv('clean_historical_qrs.csv', index=True)
+        df.to_csv('datasets/clean_historical_qrs.csv', index=True)
 
     # Split training set, test set and validation set
     train_stocks, test_stocks = train_test_split(df['Stock'].unique(), test_size=0.2, random_state=42)

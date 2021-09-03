@@ -1,8 +1,7 @@
 from collections import defaultdict
-
+from joblib import dump, load
 import numpy as np
 from tqdm import tqdm
-
 from pandas_datareader import data as pdr
 import pandas as pd
 
@@ -11,7 +10,7 @@ yf.pdr_override()
 
 
 if __name__ == '__main__':
-    df = pd.read_csv('historical_qrs.csv')
+    df = pd.read_csv('datasets/historical_qrs.csv')
 
     quarter_ends = pd.to_datetime(df['Quarter end'], errors='coerce').dropna()
     start_date, end_date = min(quarter_ends).date(), max(quarter_ends).date()
@@ -27,17 +26,24 @@ if __name__ == '__main__':
         info['ticker'] = symbol
         info_data.append(info)
 
-    from joblib import dump
-    with open('stockInfoTemp', 'wb') as f:
+    with open('datasets/stockInfoTemp', 'wb') as f:
         dump(info_data, f)
+
+    with open('datasets/stockInfoTemp', 'rb') as f:
+        info_data = load(f)
 
     info_data_dict = defaultdict(list)
     max_info = max(info_data, key=lambda x: len(x))
     for info in info_data:
+        if info is np.nan:
+            continue
         for col in max_info:
             if col in info:
-                info_data_dict[col].append(info[col])
+                val = info[col]
+                if not val:
+                    val = np.nan
+                info_data_dict[col].append(val)
             else:
-                info_data.append(np.nan)
+                info_data_dict[col].append(np.nan)
     df_info = pd.DataFrame.from_dict(info_data_dict)
-    df_info.to_csv('stock_info.csv', index=False)
+    df_info.to_csv('datasets/stock_info.csv', index=False)

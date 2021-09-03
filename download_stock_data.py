@@ -6,7 +6,7 @@ yf.pdr_override()
 
 
 if __name__ == '__main__':
-    df = pd.read_csv('historical_qrs.csv')
+    df = pd.read_csv('datasets/historical_qrs.csv')
 
     quarter_ends = pd.to_datetime(df['Quarter end'], errors='coerce').dropna()
     start_date, end_date = min(quarter_ends).date(), max(quarter_ends).date()
@@ -19,4 +19,4 @@ if __name__ == '__main__':
     df = df.stack(level=0).rename_axis(['Date', 'Ticker']).reset_index(level=1)
 
     df.index = pd.to_datetime(df.index)
-    df.to_csv('historical_stock_data.csv')
+    df.to_csv('datasets/historical_stock_data.csv')

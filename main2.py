@@ -92,7 +92,7 @@ def make_model(timestamps, features):
 
 if __name__ == '__main__':
     # Load data
-    df = pd.read_csv('historical_qrs.csv')
+    df = pd.read_csv('datasets/historical_qrs.csv')
 
     # Clean data
     df = clean(df)

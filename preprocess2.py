@@ -136,10 +136,13 @@ class OutlierMinMaxTransformer(TransformerMixin):
 
 def clean(df: pd.DataFrame) -> pd.DataFrame:
     # Convert dates to datetime
-    df['Quarter end'] = pd.to_datetime(df['Quarter end'], errors='coerce').dt.date
+    df['Quarter end'] = pd.to_datetime(df['Quarter end'], errors='coerce')
 
-    # Replace missing flags with np.nan
+    # Standardise missing values to nan
     df['Stock'] = np.where((df['Stock'] == 'None') | (df['Stock'] == ''), np.nan, df['Stock'])
+
+    # nan in dividend rate and yield should be 0 instead
+    df[['dividendRate', 'dividendYield']] = df[['dividendRate', 'dividendYield']].fillna(0)
 
     # Drop invalid rows
     df = df.dropna(subset=['Stock', 'Quarter end', 'Price'], how='any')
@@ -152,8 +155,10 @@ def clean(df: pd.DataFrame) -> pd.DataFrame:
     duplicates = df.index.duplicated(keep='first')
     df = df[~duplicates]
 
-    # Convert numeric data to numeric data
-    df = df.apply(pd.to_numeric, errors='coerce')
+    # Convert numeric data
+    str_columns = ['Stock', 'state', 'country', 'sector', 'industry', 'exchange', 'market']
+    is_numeric = ~df.columns.isin(str_columns)
+    df.loc[:, is_numeric] = df.loc[:, is_numeric].apply(pd.to_numeric, errors='coerce')
 
     # # todo: Insert missing timestamps
     # for stock in tqdm(df.index.get_level_values('Stock').unique()):
@@ -422,7 +427,7 @@ if __name__ == '__main__':
     # use_augmentation = True  # Augment training data via variance scaling, may cause data leak
 
     # Load companies quarterly reports
-    df = pd.read_csv('historical_qrs.csv')
+    df = pd.read_csv('datasets/historical_qrs.csv')
 
     # Clean data
     df = clean(df)
