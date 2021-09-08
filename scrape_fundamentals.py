@@ -9,7 +9,6 @@
 #
 # 'h1', id='title-banner'
 from collections import defaultdict
-
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 import pandas as pd
@@ -32,45 +31,54 @@ if __name__ == '__main__':
     tickers = df['Ticker'].unique().tolist()
 
     # Scrape fundamentals for all
-    # options = webdriver.ChromeOptions()
-    # options.add_argument('headless')
-    browser = webdriver.Chrome('assets/chromedriver')
+    options = webdriver.ChromeOptions()
+    options.add_argument("headless")
+    browser = webdriver.Chrome('assets/chromedriver', options=options)
     browser.get('http://graphfundamentals.com/')
 
     all_data = {'Balance Sheet': defaultdict(list), 'Income Statement': defaultdict(list),
                 'Cash Flow': defaultdict(list)}
+    failures = []
     for ticker in tqdm(tickers):
-        # Search a ticker
-        search_bar = browser.find_element_by_id('company_search_text_box')
-        search_bar.clear()
-        search_bar.send_keys(ticker + Keys.RETURN)
+        try:
+            # Search a ticker
+            search_bar = browser.find_element_by_id('company_search_text_box')
+            search_bar.clear()
+            search_bar.send_keys(ticker + Keys.RETURN)
 
-        # doc_buttons = browser.find_elements_by_css_selector("input[type='submit']")[:3]
-        # for button, doc_title in zip(doc_buttons, all_data):
-        for doc_title in tqdm(all_data, leave=False, desc='Scraping document'):
-            button = browser.find_element_by_css_selector(f"input[type='submit'][value='{doc_title}']")
+            # doc_buttons = browser.find_elements_by_css_selector("input[type='submit']")[:3]
+            # for button, doc_title in zip(doc_buttons, all_data):
+            for doc_title in all_data:
+                button = browser.find_element_by_css_selector(f"input[type='submit'][value='{doc_title}']")
 
-            # assert button.get_attribute('value') == doc_title
+                # assert button.get_attribute('value') == doc_title
 
-            button.click()
-            check_boxes = browser.find_elements_by_css_selector("input[type='checkbox']")
-            [check_box.click() for check_box in check_boxes]
+                button.click()
+                check_boxes = browser.find_elements_by_css_selector("input[type='checkbox']")
+                [check_box.click() for check_box in check_boxes]
 
-            data = all_data[doc_title]
+                data = all_data[doc_title]
 
-            table_headers = browser.find_element_by_css_selector("tr#financials-table-header")
-            dates = table_headers.find_elements_by_css_selector("th[scope='row']")
-            dates = [date.text for date in dates]
-            data['Date'] += dates
-            data['Ticker'] += len(dates) * [ticker]
+                table_headers = browser.find_element_by_css_selector("tr#financials-table-header")
+                dates = table_headers.find_elements_by_css_selector("th[scope='row']")
+                dates = [date.text for date in dates]
+                data['Date'] += dates
+                data['Ticker'] += len(dates) * [ticker]
 
-            table_body = browser.find_element_by_css_selector("tbody#financials-table-body")
-            for row in table_body.find_elements_by_css_selector('tr'):
-                row_header = row.find_element_by_css_selector("th[scope='row']")
-                elements = [e.text for e in row.find_elements_by_css_selector('td')]
-                data[row_header] += elements
+                table_body = browser.find_element_by_css_selector("tbody#financials-table-body")
+                for row in table_body.find_elements_by_css_selector('tr'):
+                    row_header = row.find_element_by_css_selector("th[scope='row']")
+                    elements = [e.text for e in row.find_elements_by_css_selector('td')]
+                    data[row_header] += elements
 
                 # assert len(elements) == len(dates)
+
+        except:
+            failures.append(tickers)
+
+    # Save tickers that could not be scraped
+    df_fails = pd.DataFrame(failures)
+    df_fails.to_csv('error_tickers.csv', index=False)
 
     # Save as dataframes
     for title, data in all_data.items():

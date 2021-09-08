@@ -1,5 +1,7 @@
 import os
 import random
+import webbrowser
+
 from joblib import load, dump
 import pandas as pd
 import numpy as np
