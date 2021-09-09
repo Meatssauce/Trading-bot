@@ -99,6 +99,10 @@ if __name__ == '__main__':
     # Clean data
     df = clean(df)
 
+    # Don't consider newly added features (haven't explored them yet)
+    df = df.drop(columns=['sector', 'state', 'country', 'industry', 'exchange', 'market', 'dividendRate',
+                          'dividendYield'])
+
     # Split training set, test set and validation set (6:2:2)
     stocks = df.index.get_level_values('Stock').unique()
     rest, test_stocks = train_test_split(stocks, test_size=0.2, shuffle=True, random_state=42)
