@@ -96,10 +96,6 @@ if __name__ == '__main__':
     # Load data
     df = pd.read_csv('datasets/historical_qrs.csv')
 
-    # Don't consider newly added features (haven't explored them yet)
-    df = df.drop(columns=['sector', 'state', 'country', 'industry', 'exchange', 'market', 'dividendRate',
-                          'dividendYield'])
-
     # Clean data
     df = clean(df)
 
